@@ -1,0 +1,17 @@
+# Normalise line endings to LF in the repository and working tree.
+# Shell scripts and Dockerfiles run inside Linux containers, where CRLF breaks them.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# Binary files: never touch line endings, never diff as text.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.pdf     binary
+*.zip     binary
+*.parquet binary
