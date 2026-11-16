@@ -28,7 +28,8 @@ where = ["src"]
 minversion = "8.0"
 testpaths = ["tests"]
 # src/ layout without an editable install: avoids the accented-path .pth problem on Windows (Lab 2 warning).
-pythonpath = ["src"]
+# tools/ holds repository scripts (not part of the package); listed so tests can import them by module name.
+pythonpath = ["src", "tools"]
 addopts = [
     "-ra",                    # summary of skipped / xfailed / failed tests at the end
     "--strict-markers",       # a typo in a @pytest.mark.<name> is an error, not a silent new marker
@@ -43,7 +44,7 @@ filterwarnings = ["error"]
 # Run with:  coverage run -m pytest   then   coverage report
 [tool.coverage.run]
 branch = true                         # both sides of every if/while must run, not just every line
-source = ["src", "tests"]             # measure our package AND the tests; tools/ is added when it exists
+source = ["src", "tests", "tools"]    # measure our package, the tests AND the repository tools
 relative_files = true                 # paths independent of the machine (Windows dev vs Linux CI)
 # No "omit": excluding code is only allowed with a reason next to the code (# pragma: no cover - <reason>).
 
