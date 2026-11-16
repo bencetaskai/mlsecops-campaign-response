@@ -8,11 +8,10 @@ secrets/
 *.key
 *.p12
 
-# Data (DVC). Never ignore *.dvc pointers or the .gitignore files DVC generates.
-/data/raw/*
-!/data/raw/*.dvc
-!/data/raw/.gitignore
-/data/processed/
+# Data (DVC). Ignore data files by pattern, never a data directory (e.g. /data/raw/*): DVC's own gitignore matcher
+# then treats the directory as ignored and silently skips the *.dvc pointers inside it.
+/data/**/*.csv
+/data/**/*.parquet
 .dvc/cache/
 .dvc/tmp/
 
