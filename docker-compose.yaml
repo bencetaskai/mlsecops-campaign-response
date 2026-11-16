@@ -1,0 +1,58 @@
+# First run: copy secrets_example/ to secrets/ and set your own values, then: docker compose up -d
+# Containers reach MinIO as http://minio:9000, the host (DVC CLI) as http://localhost:9000.
+
+name: campaign-response
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+secrets:
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
+
+services:
+  minio:
+    # Upstream MinIO no longer publishes images; this is the community rebuild used in the lab.
+    image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    ports:
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+    logging: *logging
+
+  minio-init:
+    image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
+    entrypoint: ["/bin/sh", "/scripts/create-buckets.sh"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    volumes:
+      - ./docker/minio/create-buckets.sh:/scripts/create-buckets.sh:ro
+    restart: "no"
+    logging: *logging
+
+volumes:
+  minio-data:
