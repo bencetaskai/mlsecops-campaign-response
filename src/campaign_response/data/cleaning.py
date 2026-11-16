@@ -5,12 +5,29 @@ train/holdout split causes no leakage. Every function returns a new frame and le
 """
 
 import logging
+from dataclasses import dataclass
+from datetime import date
 
 import pandas as pd
 
 from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CleaningParams:
+    """Fixed thresholds of the cleaning rules (moved to params.yaml with the DVC pipeline)."""
+
+    # Fixed, never today() or the data maximum: the same customer must always get the same result.
+    reference_date: date = date(2014, 12, 31)
+    min_age: int = 18
+    max_age: int = 100
+
+
+def birth_year_bounds(params: CleaningParams) -> tuple[int, int]:
+    """Plausible birth years: customers aged min_age to max_age at the reference date (only the year is known)."""
+    return params.reference_date.year - params.max_age, params.reference_date.year - params.min_age
 
 
 def drop_unused_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -29,3 +46,17 @@ def drop_duplicate_customers(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     removed = int(duplicated.sum())
     logger.info("dropped duplicate customers", extra={"removed": removed, "kept": len(frame) - removed})
     return frame.loc[~duplicated].copy(), removed
+
+
+def mask_implausible_birth_year(frame: pd.DataFrame, params: CleaningParams = CleaningParams()) -> pd.DataFrame:
+    """Set birth years outside the plausible age range to missing; the imputer in the model pipeline fills them.
+
+    Masking instead of dropping keeps the rest of the customer's data.
+    """
+    low, high = birth_year_bounds(params)
+    years = frame["Year_Birth"]
+    implausible = ((years < low) | (years > high)).fillna(False)
+    result = frame.copy()
+    result.loc[implausible, "Year_Birth"] = pd.NA
+    logger.info("masked implausible birth years", extra={"masked": int(implausible.sum()), "bounds": [low, high]})
+    return result

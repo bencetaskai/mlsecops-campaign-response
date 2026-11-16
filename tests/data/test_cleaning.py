@@ -1,11 +1,20 @@
 """Tests for the cleaning rules: each rule changes only what it is responsible for."""
 
 import logging
+from datetime import date
 
 import pandas as pd
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from campaign_response.data.cleaning import drop_duplicate_customers, drop_unused_columns
+from campaign_response.data.cleaning import (
+    CleaningParams,
+    birth_year_bounds,
+    drop_duplicate_customers,
+    drop_unused_columns,
+    mask_implausible_birth_year,
+)
 from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, RAW_COLUMNS
 
 
@@ -94,3 +103,67 @@ def test_drop_duplicates_logs_removed(raw_frame: pd.DataFrame, caplog: pytest.Lo
         drop_duplicate_customers(with_copy_of_first_row(raw_frame, new_id=9999))
 
     assert caplog.records[-1].__dict__["removed"] == 1
+
+
+def birth_years(*years: int | None) -> pd.DataFrame:
+    return pd.DataFrame({"Year_Birth": pd.array(list(years), dtype="Int64")})
+
+
+def test_birth_year_bounds_default_1914_1996() -> None:
+    assert birth_year_bounds(CleaningParams()) == (1914, 1996)
+
+
+@pytest.mark.parametrize(
+    ("year", "kept"),
+    [(1893, False), (1913, False), (1914, True), (1957, True), (1996, True), (1997, False), (2090, False)],
+)
+def test_mask_birth_year_bounds_inclusive(year: int, kept: bool) -> None:
+    result = mask_implausible_birth_year(birth_years(year))
+
+    assert (result.loc[0, "Year_Birth"] == year) if kept else pd.isna(result.loc[0, "Year_Birth"])
+
+
+def test_mask_birth_year_missing_stays_missing() -> None:
+    result = mask_implausible_birth_year(birth_years(None, 1957))
+
+    assert pd.isna(result.loc[0, "Year_Birth"])
+    assert result.loc[1, "Year_Birth"] == 1957
+
+
+def test_mask_birth_year_custom_params() -> None:
+    params = CleaningParams(reference_date=date(2020, 1, 1), min_age=30, max_age=60)
+
+    result = mask_implausible_birth_year(birth_years(1959, 1960, 1990, 1991), params)
+
+    assert result["Year_Birth"].isna().tolist() == [True, False, False, True]
+
+
+def test_mask_birth_year_other_columns_and_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    frame = raw_frame.assign(Year_Birth=pd.array([1893, 1957, 1900], dtype="Int64"))
+    before = frame.copy()
+
+    result = mask_implausible_birth_year(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
+    pd.testing.assert_frame_equal(result.drop(columns="Year_Birth"), frame.drop(columns="Year_Birth"))
+    assert result["Year_Birth"].dtype == "Int64"
+
+
+def test_mask_birth_year_logs_masked(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="campaign_response.data.cleaning"):
+        mask_implausible_birth_year(birth_years(1893, 1899, 1957))
+
+    assert caplog.records[-1].__dict__["masked"] == 2
+
+
+@given(st.lists(st.one_of(st.none(), st.integers(min_value=1700, max_value=2300)), min_size=1, max_size=40))
+def test_mask_birth_year_property_in_bounds_or_missing(years: list[int | None]) -> None:
+    low, high = birth_year_bounds(CleaningParams())
+
+    result = mask_implausible_birth_year(birth_years(*years))["Year_Birth"]
+
+    for before, after in zip(years, result, strict=True):
+        if before is not None and low <= before <= high:
+            assert after == before
+        else:
+            assert pd.isna(after)
