@@ -1,0 +1,6 @@
+# Version limits on transitive dependencies, applied to BOTH lockfiles (-c constraints.txt) so they stay compatible.
+#   uv pip compile pyproject.toml --universal --python-version 3.12 -c constraints.txt -o requirements.txt
+#   uv pip compile requirements-dev.in --universal --python-version 3.12 -c constraints.txt -o requirements-dev.txt
+
+# pandas allows 4.x, but botocore (via dvc-s3 in the dev tools) requires <3.
+python-dateutil<3

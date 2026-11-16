@@ -132,6 +132,29 @@ jobs:
           echo "Checking $range"
           python tools/check_commit_msg.py --range "$range"
 
+  compose:
+    name: compose
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use the example secrets
+        run: |
+          cp -r secrets_example secrets
+          rm secrets/README.md
+      - name: Validate compose configuration
+        run: docker compose config --quiet
+      - name: Start MinIO and run the bucket init
+        run: docker compose up --exit-code-from minio-init minio-init
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes
+
   pre-commit:
     name: pre-commit
     runs-on: ubuntu-24.04

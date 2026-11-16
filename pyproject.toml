@@ -11,6 +11,7 @@ authors = [{ name = "Bence TÁSKAI" }]
 dynamic = ["version"]
 # Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
+    "pandas>=2.2",
     "pydantic-settings>=2.10",
 ]
 

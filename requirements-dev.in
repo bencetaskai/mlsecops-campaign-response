@@ -1,5 +1,5 @@
 # Input for the dev lockfile; install from requirements-dev.txt, never from this file.
-#   uv pip compile requirements-dev.in --universal --python-version 3.12 -o requirements-dev.txt
+#   uv pip compile requirements-dev.in --universal --python-version 3.12 -c constraints.txt -o requirements-dev.txt
 # Compile requirements.txt first: it is included below, so both lockfiles agree.
 
 -r requirements.txt
@@ -8,4 +8,6 @@ pytest>=8.4
 coverage>=7.10
 flake8>=7.3
 pyright>=1.1.400
+pandas-stubs>=2.2
 pre-commit>=4.3
+dvc[s3]>=3.60
