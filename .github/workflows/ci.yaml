@@ -1,0 +1,162 @@
+# Continuous integration: the server-side copy of the pre-commit gates. Local hooks can be skipped
+# (git commit --no-verify); these jobs cannot, and the protect-main ruleset requires them before a merge.
+#
+# Every third-party action is pinned to a full commit SHA (the tag is in the comment): a tag can be moved
+# to other code, a SHA cannot (github_actions_docker.pdf p.13, secure_coding_frames.pdf p.38).
+
+name: ci
+
+on:
+  push:                               # every branch, so feature work gets feedback before a PR exists
+  pull_request:
+    branches: [main]
+  workflow_dispatch:                  # manual "Run workflow" button
+
+permissions:
+  contents: read                      # least privilege: the jobs only read the code
+
+concurrency:                          # a newer push to the same ref cancels the outdated run
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false  # the token is not left in .git/config for later steps
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: flake8 (PEP8, max line length 120)
+        run: flake8
+      - name: PEP8 error ratio (limit 1% of Python lines)
+        if: always()                  # report the ratio even when flake8 failed
+        run: |
+          lines=$(git ls-files -z '*.py' | xargs -0 cat | wc -l)
+          errors=$(flake8 --exit-zero --no-show-source --format='%(path)s:%(row)d:%(code)s' \
+                   | grep -cE ':[0-9]+:[A-Z]+[0-9]+$' || true)
+          ratio=$(python -c "print(f'{100 * $errors / max($lines, 1):.2f}')")
+          echo "flake8: $errors errors in $lines Python lines = $ratio% (limit 1%)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pyright gentle strict (src/, +5% extra)
+        run: pyright
+      - name: pyright standard (src/, requirement)
+        if: always()                  # both results are evidence, even if the first one fails
+        run: pyright -p pyrightconfig.standard.json
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pytest under coverage
+        run: coverage run -m pytest
+      - name: Coverage gate (>= 95%, src + tests + tools)
+        run: |
+          coverage report
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Coverage XML
+        if: always()
+        run: coverage xml
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  commit-messages:
+    name: commit-messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0              # full history: the range below needs older commits
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Check the lecture commit format
+        # Values reach the script as environment variables, never pasted into the script text with ${{ }}:
+        # that would let a crafted branch name inject shell code (script injection).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$BASE_SHA..$HEAD_SHA"      # the PR's own commits, not GitHub's synthetic test merge
+          elif [ "$REF_NAME" = "main" ]; then
+            range="HEAD^..HEAD"               # the merge commit and the branch commits it brought in
+          else
+            range="origin/main..HEAD"         # every commit of the feature branch
+          fi
+          echo "Checking $range"
+          python tools/check_commit_msg.py --range "$range"
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # These local hooks already have their own job above; skipping them here avoids running them twice.
+      SKIP: flake8,pyright-strict,pyright-standard,tests,coverage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Cache pre-commit environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Hygiene and secret scan on all files
+        run: pre-commit run --all-files --show-diff-on-failure
