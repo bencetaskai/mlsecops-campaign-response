@@ -1,0 +1,12 @@
+<keyword>: <Summary, capitalised, max 80 characters, no final period>
+
+<What changed and why.>
+
+References: MLS-
+
+Signed-off-by: Bence Táskai <113670719+bencetaskai@users.noreply.github.com>
+
+# Keywords: chore ci build data preprocess model pipeline registry api storage
+#           monitoring airflow security test fix docs merge
+# Enable once per clone: git config commit.template .gitmessage
+# Do not use `git commit -s`: it drops the empty line before Signed-off-by.
