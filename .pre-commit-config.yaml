@@ -1,46 +1,37 @@
-# Git hooks managed by pre-commit (https://pre-commit.com). The same file runs locally and in CI.
-#
-#   pre-commit install                 # once per clone: installs the pre-commit, commit-msg AND pre-push hooks
-#   pre-commit run --all-files         # run every pre-commit stage hook on the whole repo
-#   pre-commit autoupdate --freeze     # bump the remote hooks and pin them to commit SHAs
-#
-# Local hooks ("language: system") use the project's virtual environment, so commit from a terminal where
-# .venv is active (the PyCharm terminal activates it automatically).
+# Local hooks use the active .venv: commit from a terminal where it is activated.
+# Remote hooks are pinned with `pre-commit autoupdate --freeze`.
 
 minimum_pre_commit_version: "4.0.0"
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
-default_stages: [pre-commit]          # hooks without "stages" run only before a commit, not at commit-msg
+default_stages: [pre-commit]
 
 repos:
-  # --- repository hygiene (Lab 3) -------------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
-      - id: check-added-large-files   # anything above 1 MB belongs in DVC, not in git
+      - id: check-added-large-files   # larger files belong in DVC
         args: ["--maxkb=1024"]
-      - id: check-merge-conflict      # leftover <<<<<<< markers
+      - id: check-merge-conflict
       - id: check-yaml
       - id: check-toml
       - id: check-json
       - id: end-of-file-fixer
       - id: trailing-whitespace
-        args: ["--markdown-linebreak-ext=md"]  # two trailing spaces are a line break in Markdown
-      - id: mixed-line-ending         # LF everywhere; Windows scripts keep CRLF (see .gitattributes)
+        args: ["--markdown-linebreak-ext=md"]
+      - id: mixed-line-ending
         args: ["--fix=lf"]
-        exclude: '\.(bat|cmd|ps1)$'
+        exclude: '\.(bat|cmd|ps1)$'   # CRLF by design, see .gitattributes
       - id: detect-private-key
 
-  # --- secret scanning (Lab 3, version_control.pdf p.11) --------------------------------------------------------
   - repo: https://github.com/gitleaks/gitleaks
     rev: 2ca41cc1372d1e939a6a879f18cdc19fc1cac1ce  # frozen: v8.30.0
     hooks:
       - id: gitleaks
 
-  # --- professor's quality gates, run with the project's own tools and configuration -------------------------------
   - repo: local
     hooks:
       - id: flake8
-        name: flake8 (PEP8, max line length 120)
+        name: flake8
         entry: python -m flake8
         language: system
         types: [python]
@@ -50,7 +41,7 @@ repos:
         entry: python -m pyright
         language: system
         types: [python]
-        pass_filenames: false         # pyright reads its scope (src/) from pyproject.toml
+        pass_filenames: false
 
       - id: pyright-standard
         name: pyright standard (src/)
@@ -64,20 +55,20 @@ repos:
         entry: python -m coverage run -m pytest -q
         language: system
         pass_filenames: false
-        always_run: true              # a change in any file (config, data) can break a test
+        always_run: true
 
       - id: coverage
-        name: coverage >= 95% (src, tests, tools)
+        name: coverage >= 95%
         entry: python -m coverage report --skip-covered
         language: system
         pass_filenames: false
-        always_run: true              # reads .coverage written by the "tests" hook above
+        always_run: true              # must stay after "tests": reads the .coverage file it writes
 
       - id: commit-message
-        name: commit message format (version_control.pdf p.9)
+        name: commit message format
         entry: python tools/check_commit_msg.py
         language: system
-        stages: [commit-msg]          # git passes the path of the message file as the only argument
+        stages: [commit-msg]
 
       - id: docker-build
         name: docker build of the app image

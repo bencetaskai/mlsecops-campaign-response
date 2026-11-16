@@ -22,8 +22,7 @@ class Settings(BaseSettings):
         env_prefix="CRP_",
         env_file=".env",
         env_file_encoding="utf-8",
-        # Unknown keys in .env or in constructor arguments are errors, not silently ignored.
-        # Note: unknown *environment variables* are ignored by pydantic-settings, only .env and kwargs are checked.
+        # Rejects unknown keys in .env and kwargs, but NOT misspelled environment variables (pydantic-settings).
         extra="forbid",
     )
 

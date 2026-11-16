@@ -1,5 +1,3 @@
-# Central project configuration (PEP 621). Tool sections are added in the increment that introduces each tool.
-
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -10,10 +8,8 @@ description = "MLSecOps project: campaign response prediction with MLflow, FastA
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 authors = [{ name = "Bence TÁSKAI" }]
-# Single source of truth for the version: campaign_response.__version__
 dynamic = ["version"]
-# Runtime dependencies are added (with lower bounds) when the code first needs them;
-# exact pins live in the generated requirements.txt.
+# Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
     "pydantic-settings>=2.10",
 ]
@@ -27,36 +23,30 @@ where = ["src"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-# src/ layout without an editable install: avoids the accented-path .pth problem on Windows (Lab 2 warning).
-# tools/ holds repository scripts (not part of the package); listed so tests can import them by module name.
+# No editable install: its .pth file breaks on the accented Windows project path.
 pythonpath = ["src", "tools"]
 addopts = [
-    "-ra",                    # summary of skipped / xfailed / failed tests at the end
-    "--strict-markers",       # a typo in a @pytest.mark.<name> is an error, not a silent new marker
-    "--strict-config",        # a typo in this section is an error
-    "--import-mode=importlib" # tests need no __init__.py and same-named test files cannot collide
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
 ]
 xfail_strict = true
-# Warnings are errors, so deprecations surface early; justified third-party ignores are added here explicitly.
 filterwarnings = ["error"]
 
-# Coverage gate (professor): at least 95% on src/, and test code counts too ("a test that never runs is a bug").
-# Run with:  coverage run -m pytest   then   coverage report
 [tool.coverage.run]
-branch = true                         # both sides of every if/while must run, not just every line
-source = ["src", "tests", "tools"]    # measure our package, the tests AND the repository tools
-relative_files = true                 # paths independent of the machine (Windows dev vs Linux CI)
-# No "omit": excluding code is only allowed with a reason next to the code (# pragma: no cover - <reason>).
+branch = true
+source = ["src", "tests", "tools"]   # test code counts too (professor's rule)
+relative_files = true
+# No omit / exclude_lines: exclusions only as inline "# pragma: no cover - <reason>".
 
 [tool.coverage.report]
-fail_under = 95                       # coverage report exits with code 2 below this, failing pre-commit and CI
-show_missing = true                   # list the line numbers that never ran
-skip_covered = false                  # keep 100% files in the table as evidence
+fail_under = 95
+show_missing = true
+skip_covered = false
 precision = 1
-# No "exclude_lines": the only allowed exclusion is an inline "# pragma: no cover - <reason>".
 
-# Pyright "gentle strict" mode, copied verbatim from the professor's requirements (+5% extra): 0 errors on src/.
-# Requirement level (standard mode, 0 errors) is checked separately with:  pyright -p pyrightconfig.standard.json
+# Professor's "gentle strict" block (verbatim); standard mode: pyright -p pyrightconfig.standard.json
 [tool.pyright]
 include = ["src"]
 typeCheckingMode = "strict"
@@ -64,5 +54,4 @@ reportMissingTypeStubs = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
 reportUnknownVariableType = false
-# Added on top of the professor's block: check against the Python version used in CI and Docker.
 pythonVersion = "3.12"

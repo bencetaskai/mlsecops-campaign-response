@@ -1,11 +1,7 @@
-# Flake8 configuration (PEP 8 checks). Flake8 does not read pyproject.toml, hence this separate file.
-# Professor's rules: line length 120, at most 1% errors over all Python lines (our target is 0),
-# and "# noqa" only with a justification on the same line, e.g.  # noqa: E501 - <reason>
+# Flake8 does not read pyproject.toml. noqa only with a reason: # noqa: E501 - <reason>
 [flake8]
 max-line-length = 120
-# McCabe cyclomatic complexity: functions above 10 are hard to test and get split up (devops_tests p.27).
 max-complexity = 10
-# Generated or third-party folders are not our code.
 extend-exclude =
     .venv,
     build,

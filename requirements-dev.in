@@ -1,25 +1,11 @@
-# Development tools: the human-edited INPUT of the lockfile.
-#
-# Do not install from this file. Generate the pinned lockfile from it:
-#     uv pip compile requirements-dev.in --universal --python-version 3.12 -o requirements-dev.txt
-# and install exactly that:
-#     python -m pip install -r requirements-dev.txt
-#
-# Lower bounds only here ("what may work"); exact == pins of every transitive
-# dependency live in requirements-dev.txt ("what actually ran").
-# Tools are added here in the increment that first needs them.
-#
-# Compile requirements.txt (runtime) first; the dev lockfile includes it, so both use identical versions.
+# Input for the dev lockfile; install from requirements-dev.txt, never from this file.
+#   uv pip compile requirements-dev.in --universal --python-version 3.12 -o requirements-dev.txt
+# Compile requirements.txt first: it is included below, so both lockfiles agree.
 
 -r requirements.txt
 
-# --- tests and coverage (professor: tests + coverage >= 95%) ---
 pytest>=8.4
 coverage>=7.10
-
-# --- static analysis (professor: Flake8 line length 120, Pyright on src/) ---
 flake8>=7.3
 pyright>=1.1.400
-
-# --- git hooks (professor: pre-commit hooks for tests, coverage, docker build) ---
 pre-commit>=4.3

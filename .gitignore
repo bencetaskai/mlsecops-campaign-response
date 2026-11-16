@@ -1,4 +1,4 @@
-# --- Secrets (never in Git; templates live in .env.example and secrets_example/) ---
+# Secrets
 .env
 .env.*
 !.env.example
@@ -8,8 +8,7 @@ secrets/
 *.key
 *.p12
 
-# --- Data: tracked by DVC, only the *.dvc pointers and dvc.lock go into Git ---
-# Do NOT ignore *.dvc files or the .gitignore files that DVC generates.
+# Data (DVC). Never ignore *.dvc pointers or the .gitignore files DVC generates.
 /data/raw/*
 !/data/raw/*.dvc
 !/data/raw/.gitignore
@@ -17,7 +16,7 @@ secrets/
 .dvc/cache/
 .dvc/tmp/
 
-# --- MLflow / model artifacts: owned by the MLflow server and registry ---
+# MLflow / model artifacts
 mlruns/
 mlartifacts/
 mlflow.db
@@ -25,7 +24,7 @@ mlflow.db
 *.joblib
 models/
 
-# --- Python ---
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -34,7 +33,7 @@ dist/
 .venv/
 venv/
 
-# --- Tests and tool caches ---
+# Test and tool caches
 .pytest_cache/
 .coverage
 .coverage.*
@@ -45,16 +44,14 @@ htmlcov/
 .ruff_cache/
 .pyright/
 
-# --- Notebooks ---
 .ipynb_checkpoints/
 
-# --- IDE / OS ---
-# PyCharm: keep shared run configurations (.run/), ignore personal workspace files.
+# IDE / OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# --- Logs and reports generated at runtime ---
+# Runtime output
 *.log
 reports/
