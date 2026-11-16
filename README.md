@@ -13,3 +13,11 @@ on the Kaggle *Customer Personality Analysis* dataset (CC0). The project is an e
 - the whole system starts with a single `docker compose up`
 
 > Work in progress. Full documentation will follow in this README.
+
+## Known issues
+
+- **Merge commit of PR #1 (`6770d78`) breaks the commit format.** GitHub's merge button re-wrapped the message
+  body at 72 characters, splitting the `References:` and `Signed-off-by:` lines. The `commit-messages` CI job
+  caught it on the push to `main`. `main` is protected against force pushes and was not rewritten. Since then,
+  PRs are merged with `gh pr merge --merge --body-file`, using a message file checked by
+  `tools/check_commit_msg.py` beforehand; the PR template describes the procedure.
