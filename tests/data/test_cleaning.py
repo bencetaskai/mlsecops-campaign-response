@@ -14,6 +14,7 @@ from campaign_response.data.cleaning import (
     drop_duplicate_customers,
     drop_unused_columns,
     mask_implausible_birth_year,
+    mask_implausible_income,
 )
 from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, RAW_COLUMNS
 
@@ -164,6 +165,61 @@ def test_mask_birth_year_property_in_bounds_or_missing(years: list[int | None]) 
 
     for before, after in zip(years, result, strict=True):
         if before is not None and low <= before <= high:
+            assert after == before
+        else:
+            assert pd.isna(after)
+
+
+def incomes(*values: float | None) -> pd.DataFrame:
+    return pd.DataFrame({"Income": pd.array(list(values), dtype="Float64")})
+
+
+@pytest.mark.parametrize(
+    ("income", "kept"),
+    [(1730.0, True), (162397.0, True), (200000.0, True), (200000.01, False), (666666.0, False)],
+)
+def test_mask_income_threshold_inclusive(income: float, kept: bool) -> None:
+    result = mask_implausible_income(incomes(income))
+
+    assert (result.loc[0, "Income"] == income) if kept else pd.isna(result.loc[0, "Income"])
+
+
+def test_mask_income_missing_stays_missing() -> None:
+    result = mask_implausible_income(incomes(None, 666666.0, 58138.0))
+
+    assert result["Income"].isna().tolist() == [True, True, False]
+
+
+def test_mask_income_custom_threshold() -> None:
+    result = mask_implausible_income(incomes(150000.0, 160000.0), CleaningParams(max_income=155000))
+
+    assert result["Income"].isna().tolist() == [False, True]
+
+
+def test_mask_income_other_columns_and_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    frame = raw_frame.assign(Income=pd.array([666666.0, None, 71613.0], dtype="Float64"))
+    before = frame.copy()
+
+    result = mask_implausible_income(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
+    pd.testing.assert_frame_equal(result.drop(columns="Income"), frame.drop(columns="Income"))
+    assert result["Income"].dtype == "Float64"
+
+
+def test_mask_income_logs_masked(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="campaign_response.data.cleaning"):
+        mask_implausible_income(incomes(666666.0, 58138.0))
+
+    assert caplog.records[-1].__dict__["masked"] == 1
+
+
+@given(st.lists(st.one_of(st.none(), st.floats(min_value=0, max_value=1e7)), min_size=1, max_size=40))
+def test_mask_income_property_kept_or_missing(values: list[float | None]) -> None:
+    result = mask_implausible_income(incomes(*values))["Income"]
+
+    for before, after in zip(values, result, strict=True):
+        if before is not None and before <= CleaningParams().max_income:
             assert after == before
         else:
             assert pd.isna(after)

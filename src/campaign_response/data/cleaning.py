@@ -23,6 +23,8 @@ class CleaningParams:
     reference_date: date = date(2014, 12, 31)
     min_age: int = 18
     max_age: int = 100
+    # Catches placeholders such as 666666, not rich customers: the data has no income between 162,398 and 666,665.
+    max_income: float = 200_000
 
 
 def birth_year_bounds(params: CleaningParams) -> tuple[int, int]:
@@ -59,4 +61,13 @@ def mask_implausible_birth_year(frame: pd.DataFrame, params: CleaningParams = Cl
     result = frame.copy()
     result.loc[implausible, "Year_Birth"] = pd.NA
     logger.info("masked implausible birth years", extra={"masked": int(implausible.sum()), "bounds": [low, high]})
+    return result
+
+
+def mask_implausible_income(frame: pd.DataFrame, params: CleaningParams = CleaningParams()) -> pd.DataFrame:
+    """Set incomes above max_income to missing; unusual but possible values, including low ones, are kept."""
+    implausible = (frame["Income"] > params.max_income).fillna(False)
+    result = frame.copy()
+    result.loc[implausible, "Income"] = pd.NA
+    logger.info("masked implausible incomes", extra={"masked": int(implausible.sum()), "max": params.max_income})
     return result
