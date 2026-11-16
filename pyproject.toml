@@ -14,7 +14,9 @@ authors = [{ name = "Bence TÁSKAI" }]
 dynamic = ["version"]
 # Runtime dependencies are added (with lower bounds) when the code first needs them;
 # exact pins live in the generated requirements.txt.
-dependencies = []
+dependencies = [
+    "pydantic-settings>=2.10",
+]
 
 [tool.setuptools.dynamic]
 version = { attr = "campaign_response.__version__" }

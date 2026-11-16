@@ -8,6 +8,10 @@
 # Lower bounds only here ("what may work"); exact == pins of every transitive
 # dependency live in requirements-dev.txt ("what actually ran").
 # Tools are added here in the increment that first needs them.
+#
+# Compile requirements.txt (runtime) first; the dev lockfile includes it, so both use identical versions.
+
+-r requirements.txt
 
 # --- tests and coverage (professor: tests + coverage >= 95%) ---
 pytest>=8.4
