@@ -51,3 +51,15 @@ show_missing = true                   # list the line numbers that never ran
 skip_covered = false                  # keep 100% files in the table as evidence
 precision = 1
 # No "exclude_lines": the only allowed exclusion is an inline "# pragma: no cover - <reason>".
+
+# Pyright "gentle strict" mode, copied verbatim from the professor's requirements (+5% extra): 0 errors on src/.
+# Requirement level (standard mode, 0 errors) is checked separately with:  pyright -p pyrightconfig.standard.json
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+# Added on top of the professor's block: check against the Python version used in CI and Docker.
+pythonVersion = "3.12"
