@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campaign-response"
+description = "MLSecOps project: campaign response prediction with MLflow, FastAPI, DVC, Evidently and Airflow"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Bence TÁSKAI" }]
+dynamic = ["version"]
+# Lower bounds only; exact pins are generated into requirements.txt.
+dependencies = [
+    "pydantic-settings>=2.10",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "campaign_response.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# No editable install: its .pth file breaks on the accented Windows project path.
+pythonpath = ["src", "tools"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["src", "tests", "tools"]   # test code counts too (professor's rule)
+relative_files = true
+# No omit / exclude_lines: exclusions only as inline "# pragma: no cover - <reason>".
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = false
+precision = 1
+
+# Professor's "gentle strict" block (verbatim); standard mode: pyright -p pyrightconfig.standard.json
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+pythonVersion = "3.12"

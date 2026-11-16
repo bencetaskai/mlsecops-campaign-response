@@ -1,0 +1,158 @@
+# Job names are required status checks in the protect-main ruleset; renaming one breaks the merge gate.
+# Actions are pinned to commit SHAs (tag in the comment) and the runner to a fixed image.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: flake8
+        run: flake8
+      - name: PEP8 error ratio (limit 1% of Python lines)
+        if: always()
+        # The custom format lets grep count only error lines, not the statistics that .flake8 enables.
+        run: |
+          lines=$(git ls-files -z '*.py' | xargs -0 cat | wc -l)
+          errors=$(flake8 --exit-zero --no-show-source --format='%(path)s:%(row)d:%(code)s' \
+                   | grep -cE ':[0-9]+:[A-Z]+[0-9]+$' || true)
+          ratio=$(python -c "print(f'{100 * $errors / max($lines, 1):.2f}')")
+          echo "flake8: $errors errors in $lines Python lines = $ratio% (limit 1%)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pyright gentle strict (src/)
+        run: pyright
+      - name: pyright standard (src/)
+        if: always()
+        run: pyright -p pyrightconfig.standard.json
+
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: pytest under coverage
+        run: coverage run -m pytest
+      - name: Coverage gate (>= 95%)
+        run: |
+          coverage report
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Coverage XML
+        if: always()
+        run: coverage xml
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  commit-messages:
+    name: commit-messages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Check the lecture commit format
+        # Event values go through env, never ${{ }} inside the script (script injection).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$BASE_SHA..$HEAD_SHA"      # not HEAD: on PRs that is GitHub's synthetic merge commit
+          elif [ "$REF_NAME" = "main" ]; then
+            range="HEAD^..HEAD"
+          else
+            range="origin/main..HEAD"
+          fi
+          echo "Checking $range"
+          python tools/check_commit_msg.py --range "$range"
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SKIP: flake8,pyright-strict,pyright-standard,tests,coverage  # covered by their own jobs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install pinned dev dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Cache pre-commit environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Hygiene and secret scan on all files
+        run: pre-commit run --all-files --show-diff-on-failure

@@ -1,0 +1,13 @@
+# Flake8 does not read pyproject.toml. noqa only with a reason: # noqa: E501 - <reason>
+[flake8]
+max-line-length = 120
+max-complexity = 10
+extend-exclude =
+    .venv,
+    build,
+    dist,
+    .dvc,
+    *.egg-info
+show-source = true
+statistics = true
+count = true
