@@ -207,6 +207,7 @@ numpy==2.5.5
     # via
     #   -r requirements.txt
     #   pandas
+    #   pandas-stubs
 omegaconf==2.3.1
     # via
     #   dvc
@@ -223,6 +224,8 @@ packaging==26.3
     #   virtualenv
 pandas==3.1.1
     # via -r requirements.txt
+pandas-stubs==3.1.0.261029
+    # via -r requirements-dev.in
 pathspec==1.1.1
     # via
     #   dvc
