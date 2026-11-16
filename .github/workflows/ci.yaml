@@ -3,6 +3,7 @@
 #
 # Every third-party action is pinned to a full commit SHA (the tag is in the comment): a tag can be moved
 # to other code, a SHA cannot (github_actions_docker.pdf p.13, secure_coding_frames.pdf p.38).
+# For the same reason the runner image is a fixed version (ubuntu-24.04), not the moving ubuntu-latest label.
 
 name: ci
 
@@ -27,7 +28,7 @@ env:
 jobs:
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -53,7 +54,7 @@ jobs:
 
   typecheck:
     name: typecheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -74,7 +75,7 @@ jobs:
 
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -106,7 +107,7 @@ jobs:
 
   commit-messages:
     name: commit-messages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -137,7 +138,7 @@ jobs:
 
   pre-commit:
     name: pre-commit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       # These local hooks already have their own job above; skipping them here avoids running them twice.
