@@ -1,0 +1,38 @@
+# Central project configuration (PEP 621). Tool sections are added in the increment that introduces each tool.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campaign-response"
+description = "MLSecOps project: campaign response prediction with MLflow, FastAPI, DVC, Evidently and Airflow"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Bence TÁSKAI" }]
+# Single source of truth for the version: campaign_response.__version__
+dynamic = ["version"]
+# Runtime dependencies are added (with lower bounds) when the code first needs them;
+# exact pins live in the generated requirements.txt.
+dependencies = []
+
+[tool.setuptools.dynamic]
+version = { attr = "campaign_response.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# src/ layout without an editable install: avoids the accented-path .pth problem on Windows (Lab 2 warning).
+pythonpath = ["src"]
+addopts = [
+    "-ra",                    # summary of skipped / xfailed / failed tests at the end
+    "--strict-markers",       # a typo in a @pytest.mark.<name> is an error, not a silent new marker
+    "--strict-config",        # a typo in this section is an error
+    "--import-mode=importlib" # tests need no __init__.py and same-named test files cannot collide
+]
+xfail_strict = true
+# Warnings are errors, so deprecations surface early; justified third-party ignores are added here explicitly.
+filterwarnings = ["error"]
