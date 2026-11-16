@@ -1,6 +1,6 @@
 # Git hooks managed by pre-commit (https://pre-commit.com). The same file runs locally and in CI.
 #
-#   pre-commit install                 # once per clone: installs the pre-commit AND commit-msg hooks
+#   pre-commit install                 # once per clone: installs the pre-commit, commit-msg AND pre-push hooks
 #   pre-commit run --all-files         # run every pre-commit stage hook on the whole repo
 #   pre-commit autoupdate --freeze     # bump the remote hooks and pin them to commit SHAs
 #
@@ -8,7 +8,7 @@
 # .venv is active (the PyCharm terminal activates it automatically).
 
 minimum_pre_commit_version: "4.0.0"
-default_install_hook_types: [pre-commit, commit-msg]
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
 default_stages: [pre-commit]          # hooks without "stages" run only before a commit, not at commit-msg
 
 repos:
@@ -78,3 +78,12 @@ repos:
         entry: python tools/check_commit_msg.py
         language: system
         stages: [commit-msg]          # git passes the path of the message file as the only argument
+
+      - id: docker-build
+        name: docker build of the app image
+        # Needs Docker running; otherwise skip explicitly: SKIP=docker-build git push
+        entry: docker build --quiet --file docker/app.Dockerfile --tag campaign-response-app:pre-push .
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(docker/|src/|requirements\.txt$|\.dockerignore$)

@@ -1,0 +1,9 @@
+# Allow-list: exclude everything, then re-include only what the image needs.
+*
+
+!requirements.txt
+!src/
+
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
