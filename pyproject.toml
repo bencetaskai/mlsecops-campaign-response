@@ -36,3 +36,18 @@ addopts = [
 xfail_strict = true
 # Warnings are errors, so deprecations surface early; justified third-party ignores are added here explicitly.
 filterwarnings = ["error"]
+
+# Coverage gate (professor): at least 95% on src/, and test code counts too ("a test that never runs is a bug").
+# Run with:  coverage run -m pytest   then   coverage report
+[tool.coverage.run]
+branch = true                         # both sides of every if/while must run, not just every line
+source = ["src", "tests"]             # measure our package AND the tests; tools/ is added when it exists
+relative_files = true                 # paths independent of the machine (Windows dev vs Linux CI)
+# No "omit": excluding code is only allowed with a reason next to the code (# pragma: no cover - <reason>).
+
+[tool.coverage.report]
+fail_under = 95                       # coverage report exits with code 2 below this, failing pre-commit and CI
+show_missing = true                   # list the line numbers that never ran
+skip_covered = false                  # keep 100% files in the table as evidence
+precision = 1
+# No "exclude_lines": the only allowed exclusion is an inline "# pragma: no cover - <reason>".
