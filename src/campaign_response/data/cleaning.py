@@ -10,7 +10,7 @@ from datetime import date
 
 import pandas as pd
 
-from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, TARGET_COLUMN
+from campaign_response.data.schema import CONSTANT_COLUMNS, DATE_COLUMN, DATE_FORMAT, ID_COLUMN, TARGET_COLUMN
 
 logger = logging.getLogger(__name__)
 
@@ -99,4 +99,22 @@ def normalise_marital_status(frame: pd.DataFrame) -> pd.DataFrame:
     result = frame.copy()
     result["Marital_Status"] = status.replace(MARITAL_STATUS_SYNONYMS).mask(unknown)
     logger.info("normalised marital status", extra={"mapped": int(synonym.sum()), "masked": int(unknown.sum())})
+    return result
+
+
+def parse_enrollment_date(frame: pd.DataFrame) -> pd.DataFrame:
+    """Parse the enrollment date with the strict day-first format; raise if any value does not match.
+
+    No format guessing: 38% of the dates (e.g. 04-09-2012) would parse silently but wrongly as month-first.
+    A non-matching value means corrupt data that the validation gate should have rejected, so it is an error,
+    not a missing value. Values that are already missing stay missing.
+    """
+    raw = frame[DATE_COLUMN]
+    parsed = pd.to_datetime(raw, format=DATE_FORMAT, errors="coerce")
+    invalid = parsed.isna() & raw.notna()
+    if invalid.any():
+        examples = raw[invalid].head(5).tolist()
+        raise ValueError(f"{int(invalid.sum())} {DATE_COLUMN} values do not match {DATE_FORMAT}, e.g. {examples}")
+    result = frame.copy()
+    result[DATE_COLUMN] = parsed
     return result

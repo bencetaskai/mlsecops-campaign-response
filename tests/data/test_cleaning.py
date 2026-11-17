@@ -17,6 +17,7 @@ from campaign_response.data.cleaning import (
     mask_implausible_birth_year,
     mask_implausible_income,
     normalise_marital_status,
+    parse_enrollment_date,
 )
 from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, RAW_COLUMNS
 
@@ -333,3 +334,52 @@ def test_marital_logs_mapped_and_masked(caplog: pytest.LogCaptureFixture) -> Non
 
     assert caplog.records[-1].__dict__["mapped"] == 1
     assert caplog.records[-1].__dict__["masked"] == 2
+
+
+def dates(*values: str | None) -> pd.DataFrame:
+    return pd.DataFrame({"Dt_Customer": pd.array(list(values), dtype="string")})
+
+
+def test_date_parsed_day_first() -> None:
+    result = parse_enrollment_date(dates("21-08-2013", "30-07-2012"))
+
+    assert result["Dt_Customer"].tolist() == [pd.Timestamp(2013, 8, 21), pd.Timestamp(2012, 7, 30)]
+
+
+def test_date_ambiguous_read_day_first() -> None:
+    result = parse_enrollment_date(dates("04-09-2012"))
+
+    assert result.loc[0, "Dt_Customer"] == pd.Timestamp(2012, 9, 4)
+
+
+def test_date_unpadded_still_day_first() -> None:
+    result = parse_enrollment_date(dates("4-9-2012"))
+
+    assert result.loc[0, "Dt_Customer"] == pd.Timestamp(2012, 9, 4)
+
+
+@pytest.mark.parametrize("bad", ["12-31-2013", "2012-09-04", "31-02-2013", "yesterday"])
+def test_date_non_matching_ValueError(bad: str) -> None:
+    with pytest.raises(ValueError, match=r"1 Dt_Customer values do not match %d-%m-%Y"):
+        parse_enrollment_date(dates("04-09-2012", bad))
+
+
+def test_date_error_names_examples() -> None:
+    with pytest.raises(ValueError, match="'12-31-2013', '2013-01-01'"):
+        parse_enrollment_date(dates("12-31-2013", "2013-01-01"))
+
+
+def test_date_missing_stays_missing() -> None:
+    result = parse_enrollment_date(dates(None, "04-09-2012"))
+
+    assert pd.isna(result.loc[0, "Dt_Customer"])
+    assert pd.api.types.is_datetime64_any_dtype(result["Dt_Customer"])
+
+
+def test_date_other_columns_and_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    before = raw_frame.copy()
+
+    result = parse_enrollment_date(raw_frame)
+
+    pd.testing.assert_frame_equal(raw_frame, before)
+    pd.testing.assert_frame_equal(result.drop(columns="Dt_Customer"), raw_frame.drop(columns="Dt_Customer"))
