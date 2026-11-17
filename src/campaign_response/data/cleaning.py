@@ -5,7 +5,7 @@ train/holdout split causes no leakage. Every function returns a new frame and le
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 
 import pandas as pd
@@ -36,9 +36,13 @@ def birth_year_bounds(params: CleaningParams) -> tuple[int, int]:
     return params.reference_date.year - params.max_age, params.reference_date.year - params.min_age
 
 
-def drop_unused_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    """Drop the customer ID (an identifier, not a feature) and the two constant columns."""
-    return frame.drop(columns=[ID_COLUMN, *CONSTANT_COLUMNS])
+def drop_constant_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Drop the two constant columns, which carry no signal.
+
+    ID stays: it is not a feature (schema.FEATURE_COLUMNS excludes it) but the key that traces every row from the
+    raw file through cleaning and the split to a prediction.
+    """
+    return frame.drop(columns=list(CONSTANT_COLUMNS))
 
 
 def drop_duplicate_customers(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -118,3 +122,45 @@ def parse_enrollment_date(frame: pd.DataFrame) -> pd.DataFrame:
     result = frame.copy()
     result[DATE_COLUMN] = parsed
     return result
+
+
+@dataclass(frozen=True)
+class CleaningReport:
+    rows_in: int
+    duplicates_removed: int
+    conflicting_labels_removed: int
+    birth_years_masked: int
+    incomes_masked: int
+    marital_statuses_masked: int
+    rows_out: int
+    positives_out: int
+
+
+def _newly_missing(before: pd.DataFrame, after: pd.DataFrame, column: str) -> int:
+    return int(after[column].isna().sum() - before[column].isna().sum())
+
+
+def clean(frame: pd.DataFrame, params: CleaningParams = CleaningParams()) -> tuple[pd.DataFrame, CleaningReport]:
+    """Apply every cleaning rule in a fixed order to a validated raw frame; return the result and what each did.
+
+    Duplicates are judged on the raw values, before any masking: masking first would make customers that differ
+    only in an implausible value identical, and they would be merged (one such pair exists in the full file).
+    """
+    deduplicated, duplicates = drop_duplicate_customers(frame)
+    consistent, conflicts = drop_conflicting_labels(deduplicated)
+    births = mask_implausible_birth_year(consistent, params)
+    incomes = mask_implausible_income(births, params)
+    marital = normalise_marital_status(incomes)
+    cleaned = drop_constant_columns(parse_enrollment_date(marital))
+    report = CleaningReport(
+        rows_in=len(frame),
+        duplicates_removed=duplicates,
+        conflicting_labels_removed=conflicts,
+        birth_years_masked=_newly_missing(consistent, births, "Year_Birth"),
+        incomes_masked=_newly_missing(births, incomes, "Income"),
+        marital_statuses_masked=_newly_missing(incomes, marital, "Marital_Status"),
+        rows_out=len(cleaned),
+        positives_out=int(cleaned[TARGET_COLUMN].sum()),
+    )
+    logger.info("cleaned raw data", extra=asdict(report))
+    return cleaned, report

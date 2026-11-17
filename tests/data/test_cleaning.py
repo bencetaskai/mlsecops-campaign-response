@@ -1,6 +1,7 @@
 """Tests for the cleaning rules: each rule changes only what it is responsible for."""
 
 import logging
+from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
@@ -10,16 +11,18 @@ from hypothesis import strategies as st
 
 from campaign_response.data.cleaning import (
     CleaningParams,
+    CleaningReport,
     birth_year_bounds,
+    clean,
     drop_conflicting_labels,
+    drop_constant_columns,
     drop_duplicate_customers,
-    drop_unused_columns,
     mask_implausible_birth_year,
     mask_implausible_income,
     normalise_marital_status,
     parse_enrollment_date,
 )
-from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, RAW_COLUMNS
+from campaign_response.data.schema import CONSTANT_COLUMNS, FEATURE_COLUMNS, ID_COLUMN, RAW_COLUMNS
 
 
 def with_copy_of_first_row(frame: pd.DataFrame, new_id: int) -> pd.DataFrame:
@@ -28,30 +31,31 @@ def with_copy_of_first_row(frame: pd.DataFrame, new_id: int) -> pd.DataFrame:
     return pd.concat([frame, copy], ignore_index=True)
 
 
-def test_drop_unused_removes_id_and_constants(raw_frame: pd.DataFrame) -> None:
-    cleaned = drop_unused_columns(raw_frame)
+def test_drop_constants_removes_only_constants(raw_frame: pd.DataFrame) -> None:
+    cleaned = drop_constant_columns(raw_frame)
 
-    assert {ID_COLUMN, *CONSTANT_COLUMNS}.isdisjoint(cleaned.columns)
-    assert len(cleaned.columns) == len(RAW_COLUMNS) - 3
+    assert set(CONSTANT_COLUMNS).isdisjoint(cleaned.columns)
+    assert ID_COLUMN in cleaned.columns
+    assert len(cleaned.columns) == len(RAW_COLUMNS) - 2
 
 
-def test_drop_unused_keeps_other_columns(raw_frame: pd.DataFrame) -> None:
-    cleaned = drop_unused_columns(raw_frame)
+def test_drop_constants_keeps_other_columns(raw_frame: pd.DataFrame) -> None:
+    cleaned = drop_constant_columns(raw_frame)
 
     pd.testing.assert_frame_equal(cleaned, raw_frame[list(cleaned.columns)])
 
 
-def test_drop_unused_input_unchanged(raw_frame: pd.DataFrame) -> None:
+def test_drop_constants_input_unchanged(raw_frame: pd.DataFrame) -> None:
     before = raw_frame.copy()
 
-    drop_unused_columns(raw_frame)
+    drop_constant_columns(raw_frame)
 
     pd.testing.assert_frame_equal(raw_frame, before)
 
 
-def test_drop_unused_missing_column_KeyError(raw_frame: pd.DataFrame) -> None:
+def test_drop_constants_missing_column_KeyError(raw_frame: pd.DataFrame) -> None:
     with pytest.raises(KeyError, match="Z_Revenue"):
-        drop_unused_columns(raw_frame.drop(columns=["Z_Revenue"]))
+        drop_constant_columns(raw_frame.drop(columns=["Z_Revenue"]))
 
 
 def test_drop_duplicates_other_id_removed(raw_frame: pd.DataFrame) -> None:
@@ -383,3 +387,77 @@ def test_date_other_columns_and_input_unchanged(raw_frame: pd.DataFrame) -> None
 
     pd.testing.assert_frame_equal(raw_frame, before)
     pd.testing.assert_frame_equal(result.drop(columns="Dt_Customer"), raw_frame.drop(columns="Dt_Customer"))
+
+
+def messy_frame(raw_frame: pd.DataFrame) -> pd.DataFrame:
+    """raw_frame plus one exact duplicate, one conflicting copy, an implausible birth year and income, junk status."""
+    frame = with_relabelled_copies(with_copy_of_first_row(raw_frame, new_id=9999), [0])
+    frame.loc[1, "Year_Birth"] = 1893
+    frame.loc[2, "Income"] = 666666.0
+    frame.loc[2, "Marital_Status"] = "YOLO"
+    return frame
+
+
+def test_clean_report_counts(raw_frame: pd.DataFrame) -> None:
+    _, report = clean(messy_frame(raw_frame))
+
+    assert report == CleaningReport(
+        rows_in=5,
+        duplicates_removed=1,
+        conflicting_labels_removed=2,
+        birth_years_masked=1,
+        incomes_masked=1,
+        marital_statuses_masked=1,
+        rows_out=2,
+        positives_out=0,
+    )
+
+
+def test_clean_output_columns_and_types(raw_frame: pd.DataFrame) -> None:
+    cleaned, _ = clean(messy_frame(raw_frame))
+
+    assert list(cleaned["ID"]) == [2174, 4141]
+    assert set(CONSTANT_COLUMNS).isdisjoint(cleaned.columns)
+    assert pd.api.types.is_datetime64_any_dtype(cleaned["Dt_Customer"])
+    assert cleaned.loc[1, "Marital_Status"] == "Single"
+
+
+def test_clean_keeps_id_out_of_features() -> None:
+    assert ID_COLUMN not in FEATURE_COLUMNS
+
+
+def test_clean_duplicates_judged_before_masking(raw_frame: pd.DataFrame) -> None:
+    frame = with_copy_of_first_row(raw_frame, new_id=9999)
+    frame.loc[0, "Year_Birth"] = 1893
+    frame.loc[3, "Year_Birth"] = 1899
+
+    cleaned, report = clean(frame)
+
+    assert report.duplicates_removed == 0
+    assert {5524, 9999} <= set(cleaned["ID"])
+
+
+def test_clean_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    frame = messy_frame(raw_frame)
+    before = frame.copy()
+
+    clean(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        lambda frame: drop_duplicate_customers(frame)[0],
+        lambda frame: drop_conflicting_labels(frame)[0],
+        mask_implausible_birth_year,
+        mask_implausible_income,
+        normalise_marital_status,
+    ],
+    ids=["duplicates", "conflicts", "birth_year", "income", "marital_status"],
+)
+def test_rule_idempotent(rule: Callable[[pd.DataFrame], pd.DataFrame], raw_frame: pd.DataFrame) -> None:
+    once = rule(messy_frame(raw_frame))
+
+    pd.testing.assert_frame_equal(rule(once), once)
