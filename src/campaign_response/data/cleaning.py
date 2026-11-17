@@ -10,7 +10,7 @@ from datetime import date
 
 import pandas as pd
 
-from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN
+from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, TARGET_COLUMN
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,20 @@ def drop_duplicate_customers(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     removed = int(duplicated.sum())
     logger.info("dropped duplicate customers", extra={"removed": removed, "kept": len(frame) - removed})
     return frame.loc[~duplicated].copy(), removed
+
+
+def drop_conflicting_labels(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Drop every row of a customer recorded more than once with different target values; return the removed count.
+
+    Such rows are identical in every column except ID and the target, so the true label cannot be known. Keeping
+    one copy would pick a label arbitrarily, keeping all would train on contradictions.
+    """
+    features = [column for column in frame.columns if column not in {ID_COLUMN, TARGET_COLUMN}]
+    labels_per_customer = frame.groupby(features, dropna=False)[TARGET_COLUMN].transform("nunique")
+    conflicting = labels_per_customer > 1
+    removed = int(conflicting.sum())
+    logger.info("dropped conflicting labels", extra={"removed": removed, "kept": len(frame) - removed})
+    return frame.loc[~conflicting].copy(), removed
 
 
 def mask_implausible_birth_year(frame: pd.DataFrame, params: CleaningParams = CleaningParams()) -> pd.DataFrame:

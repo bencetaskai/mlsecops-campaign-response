@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from campaign_response.data.cleaning import (
     CleaningParams,
     birth_year_bounds,
+    drop_conflicting_labels,
     drop_duplicate_customers,
     drop_unused_columns,
     mask_implausible_birth_year,
@@ -105,6 +106,70 @@ def test_drop_duplicates_logs_removed(raw_frame: pd.DataFrame, caplog: pytest.Lo
         drop_duplicate_customers(with_copy_of_first_row(raw_frame, new_id=9999))
 
     assert caplog.records[-1].__dict__["removed"] == 1
+
+
+def with_relabelled_copies(frame: pd.DataFrame, labels: list[int]) -> pd.DataFrame:
+    """Append copies of row 0 (customer 5524, Response 1) under new IDs with the given labels."""
+    copies = frame.iloc[[0] * len(labels)].assign(
+        ID=pd.array(range(9000, 9000 + len(labels)), dtype="Int64"),
+        Response=pd.array(labels, dtype="Int64"),
+    )
+    return pd.concat([frame, copies], ignore_index=True)
+
+
+def test_conflict_pair_both_removed(raw_frame: pd.DataFrame) -> None:
+    cleaned, removed = drop_conflicting_labels(with_relabelled_copies(raw_frame, [0]))
+
+    assert removed == 2
+    assert list(cleaned["ID"]) == [2174, 4141]
+
+
+def test_conflict_same_label_kept(raw_frame: pd.DataFrame) -> None:
+    frame = with_relabelled_copies(raw_frame, [1])
+
+    cleaned, removed = drop_conflicting_labels(frame)
+
+    assert removed == 0
+    pd.testing.assert_frame_equal(cleaned, frame)
+
+
+def test_conflict_group_of_three_all_removed(raw_frame: pd.DataFrame) -> None:
+    _, removed = drop_conflicting_labels(with_relabelled_copies(raw_frame, [1, 0]))
+
+    assert removed == 3
+
+
+def test_conflict_missing_features_still_matched(raw_frame: pd.DataFrame) -> None:
+    frame = raw_frame.iloc[[1, 1]].assign(Response=pd.array([0, 1], dtype="Int64"))
+
+    _, removed = drop_conflicting_labels(frame)
+
+    assert pd.isna(raw_frame.loc[1, "Income"])
+    assert removed == 2
+
+
+def test_conflict_without_id_column(raw_frame: pd.DataFrame) -> None:
+    frame = with_relabelled_copies(raw_frame, [0]).drop(columns=["ID"])
+
+    _, removed = drop_conflicting_labels(frame)
+
+    assert removed == 2
+
+
+def test_conflict_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    frame = with_relabelled_copies(raw_frame, [0])
+    before = frame.copy()
+
+    drop_conflicting_labels(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_conflict_logs_removed(raw_frame: pd.DataFrame, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="campaign_response.data.cleaning"):
+        drop_conflicting_labels(with_relabelled_copies(raw_frame, [0]))
+
+    assert caplog.records[-1].__dict__["removed"] == 2
 
 
 def birth_years(*years: int | None) -> pd.DataFrame:
