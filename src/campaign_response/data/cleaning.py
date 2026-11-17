@@ -14,6 +14,10 @@ from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN
 
 logger = logging.getLogger(__name__)
 
+MARITAL_STATUS_SYNONYMS = {"Alone": "Single"}
+# Junk answers: the true status is unknown, so they become missing instead of being guessed.
+UNKNOWN_MARITAL_STATUSES = frozenset({"Absurd", "YOLO"})
+
 
 @dataclass(frozen=True)
 class CleaningParams:
@@ -70,4 +74,15 @@ def mask_implausible_income(frame: pd.DataFrame, params: CleaningParams = Cleani
     result = frame.copy()
     result.loc[implausible, "Income"] = pd.NA
     logger.info("masked implausible incomes", extra={"masked": int(implausible.sum()), "max": params.max_income})
+    return result
+
+
+def normalise_marital_status(frame: pd.DataFrame) -> pd.DataFrame:
+    """Map synonyms (Alone -> Single) and set junk answers to missing; any other value passes through unchanged."""
+    status = frame["Marital_Status"]
+    unknown = status.isin(UNKNOWN_MARITAL_STATUSES).fillna(False)
+    synonym = status.isin(MARITAL_STATUS_SYNONYMS.keys()).fillna(False)
+    result = frame.copy()
+    result["Marital_Status"] = status.replace(MARITAL_STATUS_SYNONYMS).mask(unknown)
+    logger.info("normalised marital status", extra={"mapped": int(synonym.sum()), "masked": int(unknown.sum())})
     return result

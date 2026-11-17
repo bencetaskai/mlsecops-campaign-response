@@ -15,6 +15,7 @@ from campaign_response.data.cleaning import (
     drop_unused_columns,
     mask_implausible_birth_year,
     mask_implausible_income,
+    normalise_marital_status,
 )
 from campaign_response.data.schema import CONSTANT_COLUMNS, ID_COLUMN, RAW_COLUMNS
 
@@ -223,3 +224,47 @@ def test_mask_income_property_kept_or_missing(values: list[float | None]) -> Non
             assert after == before
         else:
             assert pd.isna(after)
+
+
+def statuses(*values: str | None) -> pd.DataFrame:
+    return pd.DataFrame({"Marital_Status": pd.array(list(values), dtype="string")})
+
+
+def test_marital_alone_becomes_single() -> None:
+    result = normalise_marital_status(statuses("Alone", "Single"))
+
+    assert result["Marital_Status"].tolist() == ["Single", "Single"]
+
+
+@pytest.mark.parametrize("junk", ["Absurd", "YOLO"])
+def test_marital_junk_becomes_missing(junk: str) -> None:
+    result = normalise_marital_status(statuses(junk, "Married"))
+
+    assert pd.isna(result.loc[0, "Marital_Status"])
+    assert result.loc[1, "Marital_Status"] == "Married"
+
+
+def test_marital_known_and_unseen_unchanged() -> None:
+    values = ("Married", "Together", "Single", "Divorced", "Widow", "Engaged", None)
+
+    result = normalise_marital_status(statuses(*values))
+
+    pd.testing.assert_frame_equal(result, statuses(*values))
+
+
+def test_marital_other_columns_and_input_unchanged(raw_frame: pd.DataFrame) -> None:
+    before = raw_frame.copy()
+
+    result = normalise_marital_status(raw_frame)
+
+    pd.testing.assert_frame_equal(raw_frame, before)
+    pd.testing.assert_frame_equal(result.drop(columns="Marital_Status"), raw_frame.drop(columns="Marital_Status"))
+    assert result["Marital_Status"].dtype == "string"
+
+
+def test_marital_logs_mapped_and_masked(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="campaign_response.data.cleaning"):
+        normalise_marital_status(statuses("Alone", "YOLO", "Absurd", "Single"))
+
+    assert caplog.records[-1].__dict__["mapped"] == 1
+    assert caplog.records[-1].__dict__["masked"] == 2
