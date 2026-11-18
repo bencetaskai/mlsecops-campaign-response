@@ -5,8 +5,8 @@ stages:
     deps:
     - path: data/raw/marketing_campaign.csv
       hash: md5
-      md5: d1aaa872baade5c848b0037d43c7b0d5
-      size: 166054
+      md5: 3b624fc2bdbe29fa5fb01bdd577f78cd
+      size: 220188
     - path: src/campaign_response/cli.py
       hash: md5
       md5: 01b398f372bfc2f332fa6bb69e5acfa3
@@ -34,19 +34,19 @@ stages:
     outs:
     - path: data/processed/customers_clean.csv
       hash: md5
-      md5: 78e3b94c8919b08739d81c39392685f2
-      size: 143035
+      md5: 6d43d95d807f6d2bfd3daaeb1430c91a
+      size: 190422
     - path: metrics/prepare.json
       hash: md5
-      md5: f0dce1620a55b2c42aeaefa24acfd455
+      md5: 0cbd16bad77267ad2080706ca6ca88f5
       size: 246
   split:
     cmd: python tools/run_stage.py split
     deps:
     - path: data/processed/customers_clean.csv
       hash: md5
-      md5: 78e3b94c8919b08739d81c39392685f2
-      size: 143035
+      md5: 6d43d95d807f6d2bfd3daaeb1430c91a
+      size: 190422
     - path: src/campaign_response/cli.py
       hash: md5
       md5: 01b398f372bfc2f332fa6bb69e5acfa3
@@ -75,13 +75,13 @@ stages:
     outs:
     - path: data/processed/holdout.csv
       hash: md5
-      md5: 75d40f8ac8c4e90788e4ed5e4e055bcc
-      size: 32934
+      md5: ad7b749aa5ed6dfcffb529de78dc7777
+      size: 44652
     - path: data/processed/train.csv
       hash: md5
-      md5: 48212840ebf29cde78b6194c77edfa28
-      size: 110438
+      md5: 7a657ed3ba511a2ede12ca199a55b9e9
+      size: 146107
     - path: metrics/split.json
       hash: md5
-      md5: 36d9d5d190df64c34748d2c030d8600c
+      md5: b87705654d7d71a669ac36bc1b578789
       size: 116
