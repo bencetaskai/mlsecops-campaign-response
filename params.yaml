@@ -1,0 +1,13 @@
+# Pipeline parameters. DVC tracks every section: changing a value re-runs exactly the stages that use it.
+# The reasons for each value are in the commit history of src/campaign_response/data/cleaning.py and splitting.py.
+
+cleaning:
+  # Fixed, never today(): the same customer must always get the same result. Quoted because DVC rejects a YAML date.
+  reference_date: "2014-12-31"
+  min_age: 18                  # plausible customer age at the reference date -> birth years 1914-1996
+  max_age: 100
+  max_income: 200000           # above: placeholder values such as 666666
+
+split:
+  holdout_size: 0.25
+  seed: 42

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,11 +15,13 @@ from campaign_response.data.io import load_processed
 
 RAW = Path("data/raw/marketing_campaign.csv")
 CLEANED = Path("data/processed/customers_clean.csv")
+REPO_PARAMS = Path(__file__).resolve().parents[1] / "params.yaml"
 
 
 @pytest.fixture(autouse=True)
 def isolated_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Run in an empty directory with default settings and restore the root logger afterwards."""
+    """Run in an empty directory with the repository's params.yaml, default settings, and restore the root logger."""
+    shutil.copy(REPO_PARAMS, tmp_path / "params.yaml")
     monkeypatch.chdir(tmp_path)
     for variable in ("CRP_LOG_LEVEL", "CRP_LOG_FORMAT", "CRP_DATA_DIR"):
         monkeypatch.delenv(variable, raising=False)
@@ -99,6 +102,18 @@ def test_prepare_twice_identical_files() -> None:
     main(["prepare"])
 
     assert (CLEANED.read_bytes(), Path("metrics/prepare.json").read_bytes()) == first
+
+
+def test_split_uses_params_file() -> None:
+    write_raw(120)
+    main(["prepare"])
+    Path("half.yaml").write_text(
+        REPO_PARAMS.read_text(encoding="utf-8").replace("holdout_size: 0.25", "holdout_size: 0.5"), encoding="utf-8"
+    )
+
+    main(["--params", "half.yaml", "split"])
+
+    assert read_json("metrics/split.json")["holdout_rows"] == 60
 
 
 def test_parser_defaults_follow_data_dir() -> None:

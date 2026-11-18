@@ -13,11 +13,12 @@ from pathlib import Path
 
 from campaign_response import __version__
 from campaign_response.config import Settings
-from campaign_response.data.cleaning import clean
+from campaign_response.data.cleaning import CleaningParams, clean
 from campaign_response.data.io import load_processed, load_raw, write_processed
-from campaign_response.data.splitting import split_train_holdout
+from campaign_response.data.splitting import SplitParams, split_train_holdout
 from campaign_response.data.validation import validate_raw
 from campaign_response.logging_setup import configure_logging, new_correlation_id
+from campaign_response.params import load_params
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def write_metrics(payload: dict[str, object], path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def prepare(raw: Path, cleaned_path: Path, metrics_path: Path) -> int:
+def prepare(raw: Path, cleaned_path: Path, metrics_path: Path, params: CleaningParams) -> int:
     """Validate and clean the raw file; on a failed gate write nothing and return 1."""
     frame = load_raw(raw)
     validation = validate_raw(frame)
@@ -36,15 +37,15 @@ def prepare(raw: Path, cleaned_path: Path, metrics_path: Path) -> int:
         failures = [asdict(check) for check in validation.failures]
         logger.error("raw data failed the validation gate", extra={"failures": failures})
         return 1
-    cleaned, report = clean(frame)
+    cleaned, report = clean(frame, params)
     write_processed(cleaned, cleaned_path)
     write_metrics({"validation_checks_passed": len(validation.checks), **asdict(report)}, metrics_path)
     return 0
 
 
-def split(cleaned_path: Path, train_path: Path, holdout_path: Path, metrics_path: Path) -> int:
+def split(cleaned_path: Path, train_path: Path, holdout_path: Path, metrics_path: Path, params: SplitParams) -> int:
     """Split the cleaned data into train and holdout files."""
-    train, holdout = split_train_holdout(load_processed(cleaned_path))
+    train, holdout = split_train_holdout(load_processed(cleaned_path), params)
     write_processed(train, train_path)
     write_processed(holdout, holdout_path)
     write_metrics(
@@ -62,6 +63,7 @@ def split(cleaned_path: Path, train_path: Path, holdout_path: Path, metrics_path
 def build_parser(data_dir: Path) -> argparse.ArgumentParser:
     raw, processed = data_dir / "raw", data_dir / "processed"
     parser = argparse.ArgumentParser(prog="campaign-response", description="Campaign response MLOps pipeline.")
+    parser.add_argument("--params", type=Path, default=Path("params.yaml"), help="pipeline parameters file")
     commands = parser.add_subparsers(dest="command")
 
     prepare_parser = commands.add_parser("prepare", help="validate and clean the raw data")
@@ -86,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     configure_logging(settings.log_level, settings.log_format)
     logger.info("command started", extra={"command": args.command, "run_id": new_correlation_id()})
+    params = load_params(args.params)
     if args.command == "prepare":
-        return prepare(args.raw, args.out, args.metrics)
-    return split(args.cleaned, args.train, args.holdout, args.metrics)
+        return prepare(args.raw, args.out, args.metrics, params.cleaning)
+    return split(args.cleaned, args.train, args.holdout, args.metrics, params.split)
