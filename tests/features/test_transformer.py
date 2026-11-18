@@ -3,14 +3,17 @@
 import pickle
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import clone
+from sklearn.compose import make_column_selector, make_column_transformer
+from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
 from campaign_response.data.cleaning import clean
 from campaign_response.features.engineering import MODEL_FEATURES, add_engineered_features
-from campaign_response.features.transformer import FeatureEngineer
+from campaign_response.features.transformer import FeatureEngineer, to_sklearn_dtypes
 
 
 @pytest.fixture
@@ -29,8 +32,29 @@ def test_transformer_fit_returns_self(inputs: pd.DataFrame) -> None:
 def test_transformer_output_equals_function(inputs: pd.DataFrame) -> None:
     result = FeatureEngineer().fit_transform(inputs)
 
-    expected = add_engineered_features(inputs)[list(MODEL_FEATURES)]
+    expected = to_sklearn_dtypes(add_engineered_features(inputs)[list(MODEL_FEATURES)])
     pd.testing.assert_frame_equal(result, expected)
+
+
+def test_transformer_output_sklearn_dtypes(inputs: pd.DataFrame) -> None:
+    result = FeatureEngineer().fit_transform(inputs.assign(Marital_Status=pd.array([pd.NA, "Single", "Married"],
+                                                                                   dtype="string")))
+
+    assert {str(dtype) for dtype in result.dtypes} == {"float64", "object"}
+    assert result.loc[0, "Marital_Status"] is np.nan
+    assert np.isnan(result.loc[1, "income_per_member"])
+
+
+def test_transformer_then_imputers_no_error(inputs: pd.DataFrame) -> None:
+    missing_status = inputs.assign(Marital_Status=pd.array([pd.NA, "Single", "Married"], dtype="string"))
+    imputers = make_column_transformer(
+        (SimpleImputer(strategy="median"), make_column_selector(dtype_include="number")),
+        (SimpleImputer(strategy="most_frequent"), make_column_selector(dtype_exclude="number")),
+    )
+
+    result = Pipeline([("features", FeatureEngineer()), ("impute", imputers)]).fit_transform(missing_status)
+
+    assert result.shape == (3, len(MODEL_FEATURES))
 
 
 def test_transformer_columns_model_features(inputs: pd.DataFrame) -> None:
