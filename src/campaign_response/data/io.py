@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from campaign_response.data.schema import RAW_DTYPES
+from campaign_response.data.schema import CONSTANT_COLUMNS, DATE_COLUMN, RAW_DTYPES
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,26 @@ def load_raw(path: Path) -> pd.DataFrame:
     except ValueError as error:
         raise RawDataError(f"cannot parse {path} with the raw schema: {error}") from error
     logger.info("loaded raw data", extra={"path": str(path), "rows": len(frame), "columns": frame.shape[1]})
+    return frame
+
+
+def write_processed(frame: pd.DataFrame, path: Path) -> None:
+    """Write processed data as comma-separated UTF-8 with LF line endings and ISO dates, without the index.
+
+    Fixed formatting makes the file byte-identical for identical data, so DVC sees no change on a re-run.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(path, index=False, encoding="utf-8", lineterminator="\n", date_format="%Y-%m-%d")
+    logger.info("wrote processed data", extra={"path": str(path), "rows": len(frame), "columns": frame.shape[1]})
+
+
+def load_processed(path: Path) -> pd.DataFrame:
+    """Read a file written by write_processed back with the cleaned dtypes (raw dtypes, date parsed)."""
+    dtypes: dict[Hashable, str] = {
+        column: dtype for column, dtype in RAW_DTYPES.items() if column not in {DATE_COLUMN, *CONSTANT_COLUMNS}
+    }
+    frame = pd.read_csv(path, dtype=dtypes, encoding="utf-8")
+    frame[DATE_COLUMN] = pd.to_datetime(frame[DATE_COLUMN], format="%Y-%m-%d")
     return frame
 
 

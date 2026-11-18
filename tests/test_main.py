@@ -1,24 +1,24 @@
 """Tests for the ``python -m campaign_response`` entry point."""
 
+import importlib
 import runpy
 import sys
 
 import pytest
 
-from campaign_response.__main__ import main
 
+def test_import_runs_nothing(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(sys.modules, "campaign_response.__main__", raising=False)
 
-def test_main_prints_version_exit_0(capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main()
+    importlib.import_module("campaign_response.__main__")
 
-    assert exit_code == 0
-    assert capsys.readouterr().out == "campaign-response 0.1.0\n"
+    assert capsys.readouterr().out == ""
 
 
 def test_python_m_exit_0(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    # The import at the top of this file already loaded campaign_response.__main__. runpy would warn that it
-    # executes a module that is already imported, so remove it first; monkeypatch restores it after the test.
-    monkeypatch.delitem(sys.modules, "campaign_response.__main__")
+    # runpy warns if the module it executes is already imported; monkeypatch restores sys.modules and sys.argv.
+    monkeypatch.delitem(sys.modules, "campaign_response.__main__", raising=False)
+    monkeypatch.setattr(sys, "argv", ["campaign_response"])
 
     with pytest.raises(SystemExit) as exit_info:
         runpy.run_module("campaign_response", run_name="__main__")
