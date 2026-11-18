@@ -94,6 +94,15 @@ def test_split_writes_disjoint_parts() -> None:
     assert read_json("metrics/split.json")["holdout_positive_rate"] == 0.2
 
 
+def test_outputs_lf_line_endings() -> None:
+    write_raw(120)
+    main(["prepare"])
+    main(["split"])
+
+    for path in (CLEANED, Path("metrics/prepare.json"), Path("metrics/split.json")):
+        assert b"\r\n" not in path.read_bytes(), path
+
+
 def test_prepare_twice_identical_files() -> None:
     write_raw(120)
     main(["prepare"])

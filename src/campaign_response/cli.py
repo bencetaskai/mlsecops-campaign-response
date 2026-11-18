@@ -24,9 +24,13 @@ logger = logging.getLogger(__name__)
 
 
 def write_metrics(payload: dict[str, object], path: Path) -> None:
-    """Write metrics as sorted, indented JSON, so identical runs give identical files and readable git diffs."""
+    """Write metrics as sorted, indented JSON with LF endings, so identical runs give identical files on any OS.
+
+    newline="\\n" matters: text mode on Windows would write CRLF, and dvc.lock would then record a different hash
+    than a Linux run of the same stage.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
 
 def prepare(raw: Path, cleaned_path: Path, metrics_path: Path, params: CleaningParams) -> int:
