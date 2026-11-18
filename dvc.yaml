@@ -1,0 +1,34 @@
+stages:
+  prepare:
+    cmd: python tools/run_stage.py prepare
+    deps:
+      - data/raw/marketing_campaign.csv
+      - src/campaign_response/data
+      - src/campaign_response/cli.py
+      - src/campaign_response/params.py
+      - tools/run_stage.py
+    params:
+      - cleaning
+    outs:
+      - data/processed/customers_clean.csv
+    metrics:
+      - metrics/prepare.json:
+          cache: false
+
+  split:
+    cmd: python tools/run_stage.py split
+    deps:
+      - data/processed/customers_clean.csv
+      - src/campaign_response/data/splitting.py
+      - src/campaign_response/data/io.py
+      - src/campaign_response/cli.py
+      - src/campaign_response/params.py
+      - tools/run_stage.py
+    params:
+      - split
+    outs:
+      - data/processed/train.csv
+      - data/processed/holdout.csv
+    metrics:
+      - metrics/split.json:
+          cache: false
