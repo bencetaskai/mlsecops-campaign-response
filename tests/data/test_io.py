@@ -8,7 +8,8 @@ import pandas as pd
 import pytest
 
 from campaign_response.data import io
-from campaign_response.data.io import RawDataError, file_sha256, load_raw
+from campaign_response.data.cleaning import clean
+from campaign_response.data.io import RawDataError, file_sha256, load_processed, load_raw, write_processed
 from campaign_response.data.schema import RAW_COLUMNS, RAW_DTYPES
 
 VALID_ROW = [
@@ -72,6 +73,27 @@ def test_load_raw_bad_number_RawDataError(tmp_path: Path) -> None:
 
     with pytest.raises(RawDataError, match="cannot parse"):
         load_raw(path)
+
+
+def test_processed_round_trip_same_frame(raw_file: Path, tmp_path: Path) -> None:
+    frame, _ = clean(load_raw(raw_file))
+    path = tmp_path / "processed" / "clean.csv"
+
+    write_processed(frame, path)
+    restored = load_processed(path)
+
+    pd.testing.assert_frame_equal(restored, frame.reset_index(drop=True), check_dtype=False)
+    assert restored.dtypes.astype(str).to_dict() == frame.dtypes.astype(str).to_dict()
+
+
+def test_processed_file_lf_iso_dates(raw_file: Path, tmp_path: Path) -> None:
+    path = tmp_path / "clean.csv"
+
+    write_processed(clean(load_raw(raw_file))[0], path)
+
+    content = path.read_bytes()
+    assert b"\r\n" not in content
+    assert b"2012-09-04" in content
 
 
 def test_file_sha256_known_digest(tmp_path: Path) -> None:

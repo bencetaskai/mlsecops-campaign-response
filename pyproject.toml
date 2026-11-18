@@ -13,6 +13,8 @@ dynamic = ["version"]
 dependencies = [
     "pandas>=2.2",
     "pydantic-settings>=2.10",
+    "pyyaml>=6.0",
+    "scikit-learn>=1.6",
 ]
 
 [tool.setuptools.dynamic]
