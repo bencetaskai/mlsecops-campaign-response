@@ -1,4 +1,4 @@
-"""Shared fixtures for the data tests."""
+"""Fixtures shared by all test folders."""
 
 import pandas as pd
 import pytest
