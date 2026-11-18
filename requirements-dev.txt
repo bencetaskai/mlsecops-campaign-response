@@ -324,6 +324,7 @@ pywin32==312 ; sys_platform == 'win32'
     # via dvc-task
 pyyaml==6.0.3
     # via
+    #   -r requirements.txt
     #   omegaconf
     #   pre-commit
 requests==2.34.2
@@ -385,6 +386,8 @@ tqdm==4.70.1
     #   dvc-data
     #   fsspec
     #   scmrepo
+types-pyyaml==6.0.12.20261113
+    # via -r requirements-dev.in
 typing-extensions==4.16.0
     # via
     #   -r requirements.txt

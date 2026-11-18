@@ -27,6 +27,8 @@ python-dateutil==2.9.0.post0
     #   pandas
 python-dotenv==1.2.4
     # via pydantic-settings
+pyyaml==6.0.3
+    # via campaign-response (pyproject.toml)
 scikit-learn==1.9.1
     # via campaign-response (pyproject.toml)
 scipy==1.18.1
