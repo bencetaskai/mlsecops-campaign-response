@@ -1,80 +1,110 @@
-"""Tests for the stratified train / holdout split."""
+"""Tests for the ID-hash train / holdout split: stable, complete, disjoint."""
 
 import logging
 
 import pandas as pd
 import pytest
 
-from campaign_response.data.splitting import SplitParams, split_train_holdout
+from campaign_response.data.splitting import SplitParams, holdout_bucket, split_train_holdout
 
 
-@pytest.fixture
-def customers() -> pd.DataFrame:
-    """200 customers, 30 of them positive (15%), like the real data."""
+def customers(first_id: int, count: int) -> pd.DataFrame:
+    """Customers with consecutive IDs, every 7th one positive (about 14%, like the real data)."""
+    ids = range(first_id, first_id + count)
     return pd.DataFrame({
-        "ID": pd.array(range(1000, 1200), dtype="Int64"),
-        "Income": pd.array([float(i) for i in range(200)], dtype="Float64"),
-        "Response": pd.array([1] * 30 + [0] * 170, dtype="Int64"),
+        "ID": pd.array(list(ids), dtype="Int64"),
+        "Response": pd.array([int(i % 7 == 0) for i in ids], dtype="Int64"),
     })
 
 
-def test_split_sizes_quarter_holdout(customers: pd.DataFrame) -> None:
-    train, holdout = split_train_holdout(customers)
-
-    assert (len(train), len(holdout)) == (150, 50)
+def ids(frame: pd.DataFrame) -> set[int]:
+    return {int(i) for i in frame["ID"]}
 
 
-def test_split_positive_rate_preserved(customers: pd.DataFrame) -> None:
-    train, holdout = split_train_holdout(customers)
+def test_bucket_deterministic_in_unit_interval() -> None:
+    values = [holdout_bucket(customer_id, 42) for customer_id in range(1000)]
 
-    assert train["Response"].sum() == 22 or train["Response"].sum() == 23
-    assert holdout["Response"].mean() == pytest.approx(0.15, abs=0.02)
-
-
-def test_split_no_id_overlap_no_loss(customers: pd.DataFrame) -> None:
-    train, holdout = split_train_holdout(customers)
-
-    assert set(train["ID"]).isdisjoint(holdout["ID"])
-    assert set(train["ID"]) | set(holdout["ID"]) == set(customers["ID"])
+    assert values == [holdout_bucket(customer_id, 42) for customer_id in range(1000)]
+    assert all(0 <= value < 1 for value in values)
 
 
-def test_split_same_seed_same_split(customers: pd.DataFrame) -> None:
-    first, _ = split_train_holdout(customers)
-    second, _ = split_train_holdout(customers)
+def test_split_size_close_to_quarter() -> None:
+    _, holdout = split_train_holdout(customers(1000, 2000))
 
-    pd.testing.assert_frame_equal(first, second)
-
-
-def test_split_other_seed_other_split(customers: pd.DataFrame) -> None:
-    default, _ = split_train_holdout(customers)
-    other, _ = split_train_holdout(customers, SplitParams(seed=7))
-
-    assert set(default["ID"]) != set(other["ID"])
+    assert 0.22 <= len(holdout) / 2000 <= 0.28
 
 
-def test_split_custom_size(customers: pd.DataFrame) -> None:
-    _, holdout = split_train_holdout(customers, SplitParams(holdout_size=0.2))
+def test_split_no_id_overlap_no_loss() -> None:
+    frame = customers(1000, 2000)
 
-    assert len(holdout) == 40
+    train, holdout = split_train_holdout(frame)
+
+    assert ids(train).isdisjoint(ids(holdout))
+    assert ids(train) | ids(holdout) == ids(frame)
 
 
-def test_split_duplicate_ids_ValueError(customers: pd.DataFrame) -> None:
-    customers.loc[1, "ID"] = 1000
+def test_split_new_customers_never_move_old() -> None:
+    old = customers(1000, 1500)
+    grown = pd.concat([old, customers(5000, 500)], ignore_index=True)
+
+    old_train, old_holdout = split_train_holdout(old)
+    new_train, new_holdout = split_train_holdout(grown)
+
+    assert ids(old_holdout) <= ids(new_holdout)
+    assert ids(old_train) <= ids(new_train)
+
+
+def test_split_row_order_irrelevant() -> None:
+    frame = customers(1000, 2000)
+
+    _, holdout = split_train_holdout(frame)
+    _, shuffled_holdout = split_train_holdout(frame.sample(frac=1, random_state=0))
+
+    assert ids(holdout) == ids(shuffled_holdout)
+
+
+def test_split_other_seed_other_split() -> None:
+    frame = customers(1000, 2000)
+
+    _, default = split_train_holdout(frame)
+    _, other = split_train_holdout(frame, SplitParams(seed=7))
+
+    assert ids(default) != ids(other)
+
+
+def test_split_custom_size() -> None:
+    _, holdout = split_train_holdout(customers(1000, 2000), SplitParams(holdout_size=0.5))
+
+    assert 0.45 <= len(holdout) / 2000 <= 0.55
+
+
+def test_split_duplicate_ids_ValueError() -> None:
+    frame = customers(1000, 10)
+    frame.loc[1, "ID"] = 1000
 
     with pytest.raises(ValueError, match="1 duplicate ID values"):
-        split_train_holdout(customers)
+        split_train_holdout(frame)
 
 
-def test_split_input_unchanged(customers: pd.DataFrame) -> None:
-    before = customers.copy()
+def test_split_missing_id_ValueError() -> None:
+    frame = customers(1000, 10)
+    frame.loc[1, "ID"] = pd.NA
 
-    split_train_holdout(customers)
+    with pytest.raises(ValueError, match="missing ID values"):
+        split_train_holdout(frame)
 
-    pd.testing.assert_frame_equal(customers, before)
+
+def test_split_input_unchanged() -> None:
+    frame = customers(1000, 200)
+    before = frame.copy()
+
+    split_train_holdout(frame)
+
+    pd.testing.assert_frame_equal(frame, before)
 
 
-def test_split_logs_rates(customers: pd.DataFrame, caplog: pytest.LogCaptureFixture) -> None:
+def test_split_logs_sizes(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger="campaign_response.data.splitting"):
-        split_train_holdout(customers)
+        _, holdout = split_train_holdout(customers(1000, 200))
 
-    assert caplog.records[-1].__dict__["holdout_rows"] == 50
+    assert caplog.records[-1].__dict__["holdout_rows"] == len(holdout)

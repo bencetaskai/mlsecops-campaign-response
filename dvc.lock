@@ -13,8 +13,8 @@ stages:
       size: 4752
     - path: src/campaign_response/data
       hash: md5
-      md5: be252bfb1b7522af61b7d6b8aa50c670.dir
-      size: 58502
+      md5: 4b8b00c63354fb8a9780190c3d3a06b6.dir
+      size: 60524
       nfiles: 14
     - path: src/campaign_response/params.py
       hash: md5
@@ -57,8 +57,8 @@ stages:
       size: 2616
     - path: src/campaign_response/data/splitting.py
       hash: md5
-      md5: 665b6c01eeb8e7cf9387eb4ae6080469
-      size: 1646
+      md5: 1318e43caece4f022c881be9c1ebafd9
+      size: 2394
     - path: src/campaign_response/params.py
       hash: md5
       md5: 771f33b7034c200af403f19556f79a45
@@ -75,13 +75,13 @@ stages:
     outs:
     - path: data/processed/holdout.csv
       hash: md5
-      md5: 0b262c01848c2096e52d22b7b33fc7e8
-      size: 35898
+      md5: 75d40f8ac8c4e90788e4ed5e4e055bcc
+      size: 32934
     - path: data/processed/train.csv
       hash: md5
-      md5: 3058080b53affe8da8b31ca004c2cd0a
-      size: 107474
+      md5: 48212840ebf29cde78b6194c77edfa28
+      size: 110438
     - path: metrics/split.json
       hash: md5
-      md5: 65561d57114ee9859099d4d3f4e9da41
-      size: 115
+      md5: 36d9d5d190df64c34748d2c030d8600c
+      size: 116

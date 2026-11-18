@@ -1,10 +1,10 @@
-"""Train / holdout split of the cleaned data."""
+"""Train / holdout split of the cleaned data, stable across data versions."""
 
+import hashlib
 import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
 
 from campaign_response.data.schema import ID_COLUMN, TARGET_COLUMN
 
@@ -19,19 +19,31 @@ class SplitParams:
     seed: int = 42
 
 
+def holdout_bucket(customer_id: int, seed: int) -> float:
+    """Map a customer ID to a fixed number in [0, 1); it depends only on the ID and the seed."""
+    digest = hashlib.sha256(f"{seed}:{customer_id}".encode()).hexdigest()
+    return int(digest[:8], 16) / 0x1_0000_0000
+
+
 def split_train_holdout(
     frame: pd.DataFrame, params: SplitParams = SplitParams()
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split randomly, stratified on the target, so both parts keep the positive rate; IDs must be unique.
+    """Put each customer in the holdout if their ID hashes below holdout_size, otherwise in train.
 
+    A customer's side never depends on the other rows, so adding customers (a new data version) never moves an
+    existing one: a model trained on an earlier version is never scored on its own training customers. The price
+    is approximate stratification (positive rates differ by about 1-2 points) and an approximate holdout size.
     Model choices (candidates, hyperparameters, threshold) use only the train part; the holdout is scored once.
     """
-    duplicate_ids = int(frame[ID_COLUMN].duplicated().sum())
+    ids = frame[ID_COLUMN]
+    if ids.isna().any():
+        raise ValueError(f"missing {ID_COLUMN} values: the split assigns customers by ID")
+    duplicate_ids = int(ids.duplicated().sum())
     if duplicate_ids:
         raise ValueError(f"{duplicate_ids} duplicate {ID_COLUMN} values: a customer could land in both parts")
-    splitter = StratifiedShuffleSplit(n_splits=1, test_size=params.holdout_size, random_state=params.seed)
-    train_rows, holdout_rows = next(splitter.split(frame, frame[TARGET_COLUMN]))
-    train, holdout = frame.iloc[train_rows], frame.iloc[holdout_rows]
+    buckets = [holdout_bucket(int(customer_id), params.seed) for customer_id in ids.astype("int64")]
+    holdout_mask = pd.Series([bucket < params.holdout_size for bucket in buckets], index=frame.index, dtype=bool)
+    train, holdout = frame.loc[~holdout_mask], frame.loc[holdout_mask]
     logger.info(
         "split train / holdout",
         extra={

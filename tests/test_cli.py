@@ -89,9 +89,9 @@ def test_split_writes_disjoint_parts() -> None:
 
     train = load_processed(Path("data/processed/train.csv"))
     holdout = load_processed(Path("data/processed/holdout.csv"))
-    assert (len(train), len(holdout)) == (90, 30)
+    assert len(train) + len(holdout) == 120
     assert set(train["ID"]).isdisjoint(holdout["ID"])
-    assert read_json("metrics/split.json")["holdout_positive_rate"] == 0.2
+    assert read_json("metrics/split.json")["holdout_rows"] == len(holdout)
 
 
 def test_outputs_lf_line_endings() -> None:
@@ -120,9 +120,12 @@ def test_split_uses_params_file() -> None:
         REPO_PARAMS.read_text(encoding="utf-8").replace("holdout_size: 0.25", "holdout_size: 0.5"), encoding="utf-8"
     )
 
+    main(["split"])
+    quarter = read_json("metrics/split.json")["holdout_rows"]
+
     main(["--params", "half.yaml", "split"])
 
-    assert read_json("metrics/split.json")["holdout_rows"] == 60
+    assert read_json("metrics/split.json")["holdout_rows"] > quarter
 
 
 def test_parser_defaults_follow_data_dir() -> None:

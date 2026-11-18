@@ -1,6 +1,6 @@
 {
-  "holdout_positive_rate": 0.1667,
-  "holdout_rows": 378,
-  "train_positive_rate": 0.165,
-  "train_rows": 1133
+  "holdout_positive_rate": 0.1744,
+  "holdout_rows": 344,
+  "train_positive_rate": 0.1628,
+  "train_rows": 1167
 }
