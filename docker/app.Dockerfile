@@ -5,10 +5,12 @@
 # Pinned by digest; the tag is only for readability.
 FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 
+# The app user has no home directory, so matplotlib's font cache goes to /tmp instead of a warning on every start.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    MPLCONFIGDIR=/tmp/matplotlib
 
 WORKDIR /app
 
