@@ -14,7 +14,8 @@ from sklearn.pipeline import Pipeline
 from campaign_response.features.engineering import DEFAULT_REFERENCE_DATE
 from campaign_response.features.preprocessing import build_preprocessor
 from campaign_response.features.transformer import FeatureEngineer
-from campaign_response.modeling.candidates import BASELINE, Candidate, CandidateName, parameter_sets
+from campaign_response.modeling.candidates import BASELINE, Candidate, CandidateName, get_candidate, parameter_sets
+from campaign_response.modeling.evaluation import Metrics, compute_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -156,3 +157,64 @@ def fit_with_tuned_threshold(
 
 def decision_threshold(model: TunedThresholdClassifierCV) -> float:
     return float(model.best_threshold_)
+
+
+def evaluate_model(model: TunedThresholdClassifierCV, features: pd.DataFrame, target: pd.Series) -> Metrics:
+    """Metrics of a fitted model on new data, at the model's own threshold."""
+    return compute_metrics(target, model.predict_proba(features)[:, 1], decision_threshold(model))
+
+
+@dataclass(frozen=True)
+class TrainingResult:
+    model: TunedThresholdClassifierCV
+    best: CandidateResult
+    candidates: tuple[CandidateResult, ...]
+
+    @property
+    def threshold(self) -> float:
+        return decision_threshold(self.model)
+
+    @property
+    def baseline(self) -> CandidateResult:
+        return next(result for result in self.candidates if result.name == BASELINE)
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "best_candidate": self.best.name,
+            "best_parameters": self.best.best.parameters,
+            "cv_pr_auc": self.best.best.mean_pr_auc,
+            "baseline_cv_pr_auc": self.baseline.best.mean_pr_auc,
+            "threshold": self.threshold,
+        }
+
+
+def train_candidates(
+    features: pd.DataFrame,
+    target: pd.Series,
+    candidates: Sequence[str],
+    *,
+    n_iter: int,
+    cv_folds: int,
+    seed: int,
+    n_jobs: int | None = None,
+) -> TrainingResult:
+    """Search the requested candidates plus the baseline, select the best and fit it with a tuned threshold.
+
+    Names are checked against the allow-list before any training, so a bad request fails in milliseconds.
+    """
+    names = list(dict.fromkeys([BASELINE, *candidates]))
+    chosen = [get_candidate(name) for name in names]
+    if len(chosen) < 2:
+        raise ValueError("request at least one candidate besides the baseline")
+
+    results = tuple(
+        search_candidate(candidate, features, target, n_iter=n_iter, cv_folds=cv_folds, seed=seed, n_jobs=n_jobs)
+        for candidate in chosen
+    )
+    best = select_best(results)
+    model = fit_with_tuned_threshold(
+        get_candidate(best.name), best.best.parameters, features, target, cv_folds=cv_folds, seed=seed, n_jobs=n_jobs
+    )
+    result = TrainingResult(model=model, best=best, candidates=results)
+    logger.info("training finished", extra=result.summary())
+    return result
