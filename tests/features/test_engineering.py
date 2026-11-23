@@ -16,7 +16,8 @@ from campaign_response.features.engineering import (
 
 @pytest.fixture
 def cleaned(raw_frame: pd.DataFrame) -> pd.DataFrame:
-    """Cleaned customers 5524 (Single, 1 kid), 2174 (Alone -> Single, no income), 4141 (Together, 2 teens)."""
+    """Cleaned customers 5524 (Single, 1 kid), 2174 (Alone -> Single, no income, no purchases), 4141 (Together,
+    2 teens)."""
     frame, _ = clean(raw_frame)
     return frame.assign(
         Kidhome=pd.array([1, 0, 0], dtype="Int64"),
@@ -24,6 +25,10 @@ def cleaned(raw_frame: pd.DataFrame) -> pd.DataFrame:
         MntFruits=pd.array([10, 0, 0], dtype="Int64"),
         AcceptedCmp1=pd.array([1, 0, 0], dtype="Int64"),
         AcceptedCmp5=pd.array([1, 0, 1], dtype="Int64"),
+        NumWebPurchases=pd.array([8, 0, 8], dtype="Int64"),
+        NumCatalogPurchases=pd.array([10, 0, 2], dtype="Int64"),
+        NumStorePurchases=pd.array([4, 0, 10], dtype="Int64"),
+        NumDealsPurchases=pd.array([3, 0, 1], dtype="Int64"),
     )
 
 
@@ -37,6 +42,15 @@ def test_features_hand_computed_values(cleaned: pd.DataFrame) -> None:
     assert result["household_size"].tolist() == [2, 1, 4]
     assert result.loc[0, "income_per_member"] == 29069
     assert result.loc[2, "income_per_member"] == pytest.approx(17903.25)
+    assert result.loc[0, "store_share"] == pytest.approx(4 / 22)
+    assert result.loc[2, "store_share"] == 0.5
+
+
+def test_features_no_purchases_store_share_missing(cleaned: pd.DataFrame) -> None:
+    result = add_engineered_features(cleaned)
+
+    assert pd.isna(result.loc[1, "store_share"])
+    assert str(result["store_share"].dtype) == "Float64"
 
 
 def test_features_missing_income_propagates(cleaned: pd.DataFrame) -> None:

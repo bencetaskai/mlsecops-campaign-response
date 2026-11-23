@@ -14,21 +14,24 @@ from campaign_response.data.schema import DATE_COLUMN, FEATURE_COLUMNS
 DEFAULT_REFERENCE_DATE = CleaningParams().reference_date
 
 SPEND_COLUMNS = ("MntWines", "MntFruits", "MntMeatProducts", "MntFishProducts", "MntSweetProducts", "MntGoldProds")
+PURCHASE_CHANNEL_COLUMNS = ("NumWebPurchases", "NumCatalogPurchases", "NumStorePurchases")
 CAMPAIGN_COLUMNS = ("AcceptedCmp1", "AcceptedCmp2", "AcceptedCmp3", "AcceptedCmp4", "AcceptedCmp5")
 PARTNERED_STATUSES = frozenset({"Married", "Together"})
 
 ENGINEERED_FEATURES = (
-    "age", "tenure_days", "total_spend", "total_accepted_cmp", "household_size", "income_per_member",
+    "age", "tenure_days", "total_spend", "total_accepted_cmp", "household_size", "income_per_member", "store_share",
 )
 REPLACED_COLUMNS = ("Year_Birth", DATE_COLUMN)
 MODEL_FEATURES = tuple(column for column in FEATURE_COLUMNS if column not in REPLACED_COLUMNS) + ENGINEERED_FEATURES
 
 
 def add_engineered_features(frame: pd.DataFrame, reference_date: date = DEFAULT_REFERENCE_DATE) -> pd.DataFrame:
-    """Add the six engineered features and drop the two raw columns they replace (Year_Birth, Dt_Customer).
+    """Add the seven engineered features and drop the two raw columns they replace (Year_Birth, Dt_Customer).
 
     household_size assumes one adult unless the customer is Married or Together; a missing marital status gives a
     missing household size and income per member, which the imputer fills like any other missing value.
+    store_share counts the three purchase channels only: NumDealsPurchases is a discount flag on purchases made in
+    those channels, not a channel of its own. A customer without purchases gets a missing share instead of 0 / 0.
     """
     result = frame.copy()
     partner = result["Marital_Status"].isin(PARTNERED_STATUSES).astype("Int64").mask(result["Marital_Status"].isna())
@@ -40,4 +43,6 @@ def add_engineered_features(frame: pd.DataFrame, reference_date: date = DEFAULT_
     result["total_accepted_cmp"] = result[list(CAMPAIGN_COLUMNS)].sum(axis=1).astype("Int64")
     result["household_size"] = household
     result["income_per_member"] = result["Income"] / household
+    purchases = result[list(PURCHASE_CHANNEL_COLUMNS)].sum(axis=1)
+    result["store_share"] = (result["NumStorePurchases"] / purchases.where(purchases > 0)).astype("Float64")
     return result.drop(columns=list(REPLACED_COLUMNS))
