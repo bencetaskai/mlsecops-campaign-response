@@ -4,26 +4,45 @@ annotated-types==0.8.0
     # via pydantic
 cloudpickle==3.1.3
     # via joblib
+contourpy==1.4.0
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
+fonttools==4.68.0
+    # via matplotlib
 joblib==1.6.0
     # via scikit-learn
+kiwisolver==1.5.1
+    # via matplotlib
+matplotlib==3.11.2
+    # via campaign-response (pyproject.toml)
 narwhals==2.29.0
     # via scikit-learn
 numpy==2.5.5
     # via
+    #   contourpy
+    #   matplotlib
     #   pandas
     #   scikit-learn
     #   scipy
+packaging==26.3
+    # via matplotlib
 pandas==3.1.1
     # via campaign-response (pyproject.toml)
+pillow==13.0.0
+    # via matplotlib
 pydantic==2.14.3
     # via pydantic-settings
 pydantic-core==2.50.4
     # via pydantic
 pydantic-settings==2.16.3
     # via campaign-response (pyproject.toml)
+pyparsing==3.3.3
+    # via matplotlib
 python-dateutil==2.9.0.post0
     # via
     #   -c constraints.txt
+    #   matplotlib
     #   pandas
 python-dotenv==1.2.4
     # via pydantic-settings
