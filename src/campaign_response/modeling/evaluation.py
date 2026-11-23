@@ -3,7 +3,7 @@
 from dataclasses import asdict, dataclass
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from sklearn.metrics import (
     average_precision_score,
     balanced_accuracy_score,
@@ -41,11 +41,11 @@ class Metrics:
         return asdict(self)
 
 
-def compute_metrics(y_true: ArrayLike, y_score: ArrayLike, threshold: float) -> Metrics:
-    """Evaluate positive-class scores in [0, 1] against 0/1 labels; a score >= threshold predicts 1, as in sklearn.
+def check_inputs(y_true: ArrayLike, y_score: ArrayLike) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    """Return 0/1 labels and positive-class scores as arrays, or raise ValueError if the metrics are undefined.
 
-    Raises ValueError for inputs on which the metrics are undefined or meaningless, instead of returning NaN that
-    would silently pass or fail the promotion gate.
+    Raising instead of returning NaN matters for the promotion gate: any comparison with NaN is False, so a NaN score
+    would silently pass or fail it.
     """
     labels = np.asarray(y_true, dtype=float)
     scores = np.asarray(y_score, dtype=float)
@@ -57,10 +57,19 @@ def compute_metrics(y_true: ArrayLike, y_score: ArrayLike, threshold: float) -> 
         raise ValueError("y_true must contain both classes; ranking metrics are undefined for a single class")
     if not (np.isfinite(scores).all() and scores.min() >= 0 and scores.max() <= 1):
         raise ValueError("y_score must be finite and within [0, 1]")
+    return labels.astype(np.int64), scores
+
+
+def check_threshold(threshold: float) -> None:
     if not 0 <= threshold <= 1:
         raise ValueError(f"threshold must be within [0, 1], got {threshold}")
 
-    truth = labels.astype(int)
+
+def compute_metrics(y_true: ArrayLike, y_score: ArrayLike, threshold: float) -> Metrics:
+    """Evaluate positive-class scores in [0, 1] against 0/1 labels; a score >= threshold predicts 1, as in sklearn."""
+    truth, scores = check_inputs(y_true, y_score)
+    check_threshold(threshold)
+
     predicted = (scores >= threshold).astype(int)
     tn, fp, fn, tp = (int(count) for count in confusion_matrix(truth, predicted, labels=[0, 1]).ravel())
     # Both classes are present, so tp + fn > 0; only precision needs a zero guard (no positive predictions).
