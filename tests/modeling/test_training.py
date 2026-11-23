@@ -2,15 +2,19 @@
 
 import logging
 
+import numpy as np
 import pandas as pd
 import pytest
 from sklearn.base import clone
+from sklearn.model_selection import TunedThresholdClassifierCV
 
 from campaign_response.modeling.candidates import CandidateName, get_candidate
 from campaign_response.modeling.training import (
     CandidateResult,
     ParameterSetScore,
     build_pipeline,
+    decision_threshold,
+    fit_with_tuned_threshold,
     search_candidate,
     select_best,
 )
@@ -32,6 +36,12 @@ def test_build_pipeline_steps_and_seed() -> None:
 
     assert [name for name, _ in pipeline.steps] == ["features", "preprocess", "model"]
     assert pipeline.get_params()["model__random_state"] == 11
+
+
+def test_build_pipeline_applies_parameters() -> None:
+    pipeline = build_pipeline(get_candidate("logistic_regression"), seed=1, parameters={"C": 0.1})
+
+    assert pipeline.get_params()["model__C"] == 0.1
 
 
 def test_build_pipeline_fits_raw_customer_columns(data: tuple[pd.DataFrame, pd.Series]) -> None:
@@ -127,3 +137,41 @@ def test_search_candidate_fit_error_raises_not_nan(data: tuple[pd.DataFrame, pd.
     with pytest.raises(KeyError, match="Income"):
         search_candidate(get_candidate("logistic_regression"), features.drop(columns=["Income"]), target,
                          n_iter=1, cv_folds=3, seed=42)
+
+
+@pytest.fixture(scope="module")
+def tuned(customers: pd.DataFrame) -> TunedThresholdClassifierCV:
+    features, target = customers.drop(columns=["ID", "Response"]), customers["Response"].astype(int)
+    return fit_with_tuned_threshold(get_candidate("logistic_regression"), {"C": 0.3}, features, target,
+                                    cv_folds=3, seed=42)
+
+
+def test_tuned_threshold_inside_unit_interval(tuned: TunedThresholdClassifierCV) -> None:
+    assert 0 < decision_threshold(tuned) < 1
+
+
+def test_tuned_predict_uses_threshold(tuned: TunedThresholdClassifierCV, data: tuple[pd.DataFrame, pd.Series]) -> None:
+    features = data[0]
+
+    scores = tuned.predict_proba(features)[:, 1]
+
+    np.testing.assert_array_equal(tuned.predict(features), (scores >= decision_threshold(tuned)).astype(int))
+
+
+def test_tuned_refitted_with_chosen_parameters(tuned: TunedThresholdClassifierCV) -> None:
+    assert tuned.estimator_.get_params()["model__C"] == 0.3
+
+
+def test_tuned_same_seed_same_threshold(
+    tuned: TunedThresholdClassifierCV, data: tuple[pd.DataFrame, pd.Series]
+) -> None:
+    again = fit_with_tuned_threshold(get_candidate("logistic_regression"), {"C": 0.3}, *data, cv_folds=3, seed=42)
+
+    assert decision_threshold(again) == decision_threshold(tuned)
+
+
+def test_tuned_logs_threshold(data: tuple[pd.DataFrame, pd.Series], caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger="campaign_response.modeling.training"):
+        model = fit_with_tuned_threshold(get_candidate("logistic_regression"), {}, *data, cv_folds=3, seed=42)
+
+    assert caplog.records[-1].__dict__["threshold"] == round(decision_threshold(model), 4)
