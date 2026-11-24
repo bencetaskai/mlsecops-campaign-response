@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.splitting import SplitParams
+from campaign_response.registry.promotion import GateParams
 
 
 class _CleaningSection(BaseModel):
@@ -34,17 +35,40 @@ class _SplitSection(BaseModel):
     seed: int
 
 
+class _GateSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_pr_auc: float = Field(ge=0, le=1)
+    prevalence_margin: float = Field(ge=0, le=1)
+    max_roc_auc_drop: float = Field(ge=0, le=1)
+    min_recall: float = Field(ge=0, le=1)
+    min_prediction_rate: float = Field(ge=0, le=1)
+    max_prediction_rate: float = Field(ge=0, le=1)
+    bootstrap_resamples: int = Field(ge=100)
+    bootstrap_quantile: float = Field(gt=0, lt=0.5)
+    max_pr_auc_loss: float = Field(ge=0, le=1)
+    seed: int
+
+    @model_validator(mode="after")
+    def _rates_ordered(self) -> Self:
+        if self.min_prediction_rate >= self.max_prediction_rate:
+            raise ValueError("min_prediction_rate must be below max_prediction_rate")
+        return self
+
+
 class _ParamsFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cleaning: _CleaningSection
     split: _SplitSection
+    gate: _GateSection
 
 
 @dataclass(frozen=True)
 class PipelineParams:
     cleaning: CleaningParams
     split: SplitParams
+    gate: GateParams
 
 
 def load_params(path: Path) -> PipelineParams:
@@ -54,4 +78,5 @@ def load_params(path: Path) -> PipelineParams:
     return PipelineParams(
         cleaning=CleaningParams(**content.cleaning.model_dump()),
         split=SplitParams(**content.split.model_dump()),
+        gate=GateParams(**content.gate.model_dump()),
     )

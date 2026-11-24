@@ -1,5 +1,6 @@
 # Pipeline parameters. DVC tracks every section: changing a value re-runs exactly the stages that use it.
-# The reasons for each value are in the commit history of src/campaign_response/data/cleaning.py and splitting.py.
+# The reasons for each value are in the commit history of src/campaign_response/data/cleaning.py and splitting.py,
+# and for the gate in the docstring of src/campaign_response/registry/promotion.py.
 
 cleaning:
   # Fixed, never today(): the same customer must always get the same result. Quoted because DVC rejects a YAML date.
@@ -10,4 +11,18 @@ cleaning:
 
 split:
   holdout_size: 0.25
+  seed: 42
+
+# Champion/challenger promotion. Calibrated on the training split: normal models score PR-AUC >= 0.47, recall >= 0.37
+# and predict 9-29% responders, so these limits catch broken models, not ordinary variation.
+gate:
+  min_pr_auc: 0.30             # G1 floor, together with prevalence + prevalence_margin
+  prevalence_margin: 0.10
+  max_roc_auc_drop: 0.02       # G3 guard; equal-quality models differ by up to 0.012 (5th percentile)
+  min_recall: 0.30             # G3 guard
+  min_prediction_rate: 0.02    # G4 sanity
+  max_prediction_rate: 0.60
+  bootstrap_resamples: 1000    # G2: promote unless the 10th percentile of the paired PR-AUC difference
+  bootstrap_quantile: 0.10     #     is at or below -0.02
+  max_pr_auc_loss: 0.02
   seed: 42

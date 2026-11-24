@@ -1,4 +1,4 @@
-schema: '2.0'
+﻿schema: '2.0'
 stages:
   prepare:
     cmd: python tools/run_stage.py prepare
@@ -18,8 +18,8 @@ stages:
       nfiles: 7
     - path: src/campaign_response/params.py
       hash: md5
-      md5: 771f33b7034c200af403f19556f79a45
-      size: 1736
+      md5: 5dc1e8f60e9afa7ec817b6289beae306
+      size: 2660
     - path: tools/run_stage.py
       hash: md5
       md5: c8ce45562eae308baf6a9075352e5032
@@ -61,8 +61,8 @@ stages:
       size: 2394
     - path: src/campaign_response/params.py
       hash: md5
-      md5: 771f33b7034c200af403f19556f79a45
-      size: 1736
+      md5: 5dc1e8f60e9afa7ec817b6289beae306
+      size: 2660
     - path: tools/run_stage.py
       hash: md5
       md5: c8ce45562eae308baf6a9075352e5032
