@@ -36,7 +36,9 @@ cycler==0.12.1
 databricks-sdk==0.170.0
     # via mlflow-skinny
 fastapi==0.165.0
-    # via mlflow-skinny
+    # via
+    #   campaign-response (pyproject.toml)
+    #   mlflow-skinny
 fonttools==4.68.0
     # via matplotlib
 gitdb==4.0.12

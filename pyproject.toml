@@ -11,6 +11,7 @@ authors = [{ name = "Bence TÁSKAI" }]
 dynamic = ["version"]
 # Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
+    "fastapi>=0.115",   # REST API; Starlette and Pydantic come with it
     "matplotlib>=3.9",
     "mlflow-skinny>=3.18,<3.19",   # client only; same minor version as the MLflow server image
     "pandas>=2.2",
