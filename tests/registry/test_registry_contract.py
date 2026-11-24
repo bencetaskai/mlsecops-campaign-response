@@ -1,6 +1,10 @@
-"""Registry behaviour every implementation must show; parametrised so the MLflow adapter runs the same checks."""
+"""Registry behaviour every implementation must show, run against the in-memory fake and a real local MLflow.
+
+If the fake drifts away from MLflow's behaviour, the same test passes for one backend and fails for the other.
+"""
 
 from collections.abc import Iterator
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -8,16 +12,22 @@ import pytest
 from fakes import FakeRegistry, FakeTracker
 from sklearn.dummy import DummyClassifier
 
+from campaign_response.registry.mlflow_adapter import MlflowRegistry, MlflowTracker
 from campaign_response.registry.ports import CHAMPION, ExperimentTracker, ModelRegistry
 
 FEATURES = pd.DataFrame({"x": [0.0, 1.0, 2.0, 3.0]})
 TARGET = [0, 1, 0, 1]
 
 
-@pytest.fixture(params=["fake"])
+@pytest.fixture(params=["fake", "mlflow"])
 def backend(request: pytest.FixtureRequest) -> Iterator[tuple[ExperimentTracker, ModelRegistry]]:
-    tracker = FakeTracker()
-    yield tracker, FakeRegistry(tracker)
+    if request.param == "fake":
+        tracker = FakeTracker()
+        yield tracker, FakeRegistry(tracker)
+    else:
+        # One store per module; a fresh model name per test gives each test its own version numbering.
+        uri = request.getfixturevalue("mlflow_tracking_uri")
+        yield MlflowTracker(uri), MlflowRegistry(uri, f"contract-{uuid4().hex[:8]}")
 
 
 def register_model(backend: tuple[ExperimentTracker, ModelRegistry], constant: int = 0) -> int:

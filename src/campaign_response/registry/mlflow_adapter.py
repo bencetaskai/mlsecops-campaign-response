@@ -4,6 +4,7 @@ Runs are addressed by id through MlflowClient instead of mlflow.start_run(): the
 global state, which two concurrent API requests would share.
 """
 
+import tempfile
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from importlib.metadata import version
@@ -11,13 +12,17 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
+import mlflow.artifacts
 import pandas as pd
+import skops.io
 from matplotlib.figure import Figure
 from mlflow import MlflowClient
 from mlflow.entities import Metric, Param, RunStatus, RunTag
+from mlflow.exceptions import MlflowException
+from mlflow.models import Model
 from mlflow.sklearn import log_model
 
-from campaign_response.registry.ports import Classifier
+from campaign_response.registry.ports import Classifier, ModelVersion
 
 MODEL_ARTIFACT_NAME = "model"
 
@@ -96,3 +101,81 @@ class MlflowTracker:
     def _experiment_id(self, name: str) -> str:
         experiment = self._client.get_experiment_by_name(name)
         return experiment.experiment_id if experiment is not None else self._client.create_experiment(name)
+
+
+class MlflowRegistry:
+    """The ModelRegistry port for one registered model name."""
+
+    def __init__(self, tracking_uri: str, model_name: str) -> None:
+        self._tracking_uri = tracking_uri
+        self._client = MlflowClient(tracking_uri)
+        self._name = model_name
+
+    def register(self, model_uri: str, run_id: str) -> ModelVersion:
+        self._ensure_registered_model()
+        created = self._client.create_model_version(
+            self._name, source=model_uri, run_id=run_id, model_id=model_uri.removeprefix("models:/")
+        )
+        return ModelVersion(self._name, int(created.version), run_id)
+
+    def set_alias(self, alias: str, version: int) -> None:
+        with _version_must_exist(self._name, version):
+            self._client.set_registered_model_alias(self._name, alias, str(version))
+
+    def get_by_alias(self, alias: str) -> ModelVersion | None:
+        # Read from the alias map: an unset alias is a normal state, and MLflow reports it only through a generic
+        # INVALID_PARAMETER_VALUE error that would have to be told apart by its message.
+        try:
+            aliases = self._client.get_registered_model(self._name).aliases
+        except MlflowException as error:
+            if error.error_code == "RESOURCE_DOES_NOT_EXIST":
+                return None
+            raise
+        return self._version(int(aliases[alias])) if alias in aliases else None
+
+    def set_version_tags(self, version: int, tags: Mapping[str, str]) -> None:
+        with _version_must_exist(self._name, version):
+            for key, value in tags.items():
+                self._client.set_model_version_tag(self._name, str(version), key, str(value))
+
+    def load_model(self, version: int) -> Classifier:
+        """Load the skops file with our own trusted types, never the list stored in the model's MLmodel file.
+
+        mlflow.sklearn.load_model trusts the list saved next to the model, so whoever can replace the model can also
+        widen that list. Pickle-based models are refused outright.
+        """
+        self._version(version)
+        with tempfile.TemporaryDirectory() as folder:
+            local = Path(mlflow.artifacts.download_artifacts(
+                artifact_uri=f"models:/{self._name}/{version}", dst_path=folder, tracking_uri=self._tracking_uri
+            ))
+            flavor = Model.load(str(local / "MLmodel")).flavors["sklearn"]
+            if flavor.get("serialization_format") != "skops":
+                raise ValueError(
+                    f"refusing to load version {version}: serialization {flavor.get('serialization_format')!r} "
+                    "can run arbitrary code; only skops models are accepted"
+                )
+            return skops.io.load(local / flavor["pickled_model"], trusted=list(SKOPS_TRUSTED_TYPES))
+
+    def _version(self, version: int) -> ModelVersion:
+        with _version_must_exist(self._name, version):
+            found = self._client.get_model_version(self._name, str(version))
+        return ModelVersion(self._name, int(found.version), found.run_id or "")
+
+    def _ensure_registered_model(self) -> None:
+        try:
+            self._client.create_registered_model(self._name)
+        except MlflowException as error:
+            if error.error_code != "RESOURCE_ALREADY_EXISTS":
+                raise
+
+
+@contextmanager
+def _version_must_exist(name: str, version: int) -> Generator[None]:
+    """Translate MLflow's not-found error into the LookupError the port promises."""
+    try:
+        yield
+    except MlflowException as error:
+        if error.error_code == "RESOURCE_DOES_NOT_EXIST":
+            raise LookupError(f"unknown version {version} of {name!r}") from error
+        raise

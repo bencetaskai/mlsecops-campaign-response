@@ -1,7 +1,6 @@
-"""The MLflow tracker adapter against a real local MLflow: a SQLite store and a local artifact folder in tmp."""
+"""The MLflow tracker adapter against a real local MLflow (store from tests/registry/conftest.py)."""
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 
 import mlflow
@@ -22,24 +21,13 @@ from campaign_response.registry.ports import ExperimentTracker
 
 
 @pytest.fixture(scope="module")
-def tracking_uri(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
-    """One SQLite store per module (creating its tables takes about a second); artifacts land in ./mlruns of tmp."""
-    folder = tmp_path_factory.mktemp("mlflow")
-    previous = mlflow.get_tracking_uri()
-    with pytest.MonkeyPatch.context() as patch:
-        patch.chdir(folder)
-        yield f"sqlite:///{(folder / 'mlflow.db').as_posix()}"
-    mlflow.set_tracking_uri(previous)
+def tracker(mlflow_tracking_uri: str) -> MlflowTracker:
+    return MlflowTracker(mlflow_tracking_uri)
 
 
 @pytest.fixture(scope="module")
-def tracker(tracking_uri: str) -> MlflowTracker:
-    return MlflowTracker(tracking_uri)
-
-
-@pytest.fixture(scope="module")
-def client(tracking_uri: str) -> MlflowClient:
-    return MlflowClient(tracking_uri)
+def client(mlflow_tracking_uri: str) -> MlflowClient:
+    return MlflowClient(mlflow_tracking_uri)
 
 
 @pytest.fixture(scope="module")
