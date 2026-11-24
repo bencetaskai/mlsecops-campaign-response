@@ -11,6 +11,7 @@ from fastapi import FastAPI, Response, status
 
 from campaign_response import __version__
 from campaign_response.registry.ports import CHAMPION, ModelRegistry, ModelVersion
+from campaign_response.serving.middleware import request_context
 from campaign_response.serving.schemas import HealthStatus, VersionInfo
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
         version=__version__,
         description="Trains campaign response models with a promotion gate and serves the champion.",
     )
+    app.middleware("http")(request_context)
 
     @app.get("/health/live", tags=["health"])
     def live() -> HealthStatus:
