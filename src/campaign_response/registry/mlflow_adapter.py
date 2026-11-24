@@ -86,7 +86,7 @@ class MlflowTracker:
     def log_file(self, run_id: str, local_path: Path, artifact_path: str | None = None) -> None:
         self._client.log_artifact(run_id, str(local_path), artifact_path)
 
-    def log_model(self, run_id: str, model: Classifier, input_example: pd.DataFrame) -> str:
+    def log_model(self, run_id: str, model: Any, input_example: pd.DataFrame) -> str:
         """Log as skops with the signature inferred from the example; returns the models:/ URI to register."""
         info = log_model(
             model,

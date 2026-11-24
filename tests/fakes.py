@@ -75,7 +75,7 @@ class FakeTracker:
         name = f"{artifact_path}/{local_path.name}" if artifact_path else local_path.name
         self._get(run_id).artifacts[name] = local_path.read_bytes()
 
-    def log_model(self, run_id: str, model: Classifier, input_example: pd.DataFrame) -> str:
+    def log_model(self, run_id: str, model: Any, input_example: pd.DataFrame) -> str:
         self._get(run_id).model = model
         return f"runs:/{run_id}/model"
 

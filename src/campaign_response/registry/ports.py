@@ -59,8 +59,12 @@ class ExperimentTracker(Protocol):
 
     def log_file(self, run_id: str, local_path: Path, artifact_path: str | None = None) -> None: ...
 
-    def log_model(self, run_id: str, model: Classifier, input_example: pd.DataFrame) -> str:
-        """Store the fitted model in the run and return its URI for registration."""
+    def log_model(self, run_id: str, model: Any, input_example: pd.DataFrame) -> str:
+        """Store the fitted model in the run and return its URI for registration.
+
+        Any, not Classifier: sklearn exposes predict_proba through a descriptor that exists only when the wrapped
+        estimator supports it, which a static Protocol cannot match.
+        """
         ...
 
 
