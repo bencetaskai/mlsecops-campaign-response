@@ -1,7 +1,9 @@
 """Fixtures shared by all test folders."""
 
+from collections.abc import Iterator
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
@@ -83,3 +85,18 @@ def raw_customers_file(raw_customers: pd.DataFrame, tmp_path_factory: pytest.Tem
     path = tmp_path_factory.mktemp("raw") / "marketing_campaign.csv"
     raw_customers.to_csv(path, sep="\t", index=False, lineterminator="\r\n")
     return path
+
+
+@pytest.fixture(scope="module")
+def mlflow_tracking_uri(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """One store per test module, as creating its tables takes about a second.
+
+    The working directory moves to the temporary folder because a SQLite store without a server puts artifacts into
+    ./mlruns; the process-wide tracking URI, which MlflowTracker sets, is restored afterwards.
+    """
+    folder = tmp_path_factory.mktemp("mlflow")
+    previous = mlflow.get_tracking_uri()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(folder)
+        yield f"sqlite:///{(folder / 'mlflow.db').as_posix()}"
+    mlflow.set_tracking_uri(previous)
