@@ -23,7 +23,15 @@ from campaign_response.modeling.plots import evaluation_figures
 from campaign_response.modeling.training import TrainingResult, evaluate_model, train_candidates
 from campaign_response.params import PipelineParams
 from campaign_response.registry.lineage import TrainedBy, lineage_tags
-from campaign_response.registry.ports import CHALLENGER, ExperimentTracker, ModelRegistry, ModelVersion
+from campaign_response.registry.ports import (
+    CHALLENGER,
+    CHAMPION,
+    PREVIOUS,
+    ExperimentTracker,
+    ModelRegistry,
+    ModelVersion,
+)
+from campaign_response.registry.promotion import GateDecision, decide_promotion
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +68,12 @@ class TrainingOutcome:
     best_candidate: str
     threshold: float
     holdout: Metrics
+    decision: GateDecision
+    champion: ModelVersion | None
+
+    @property
+    def promoted(self) -> bool:
+        return self.decision.promoted
 
 
 def flatten(values: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
@@ -124,9 +138,51 @@ def run_training(request: TrainingRequest, context: TrainingContext) -> Training
         context.registry.set_alias(CHALLENGER, version.version)
         tracker.set_tags(run_id, {"best_candidate": result.best.name, "model_version": str(version.version)})
 
-    logger.info("training run finished", extra={"run_id": run_id, "model_version": version.version,
-                                                **result.summary()})
-    return TrainingOutcome(run_id, version, result.best.name, result.threshold, holdout_metrics)
+        decision, champion = _apply_gate(context, version, holdout_features, holdout_target, scores, result.threshold)
+        tracker.set_tags(run_id, {
+            "promoted": str(decision.promoted).lower(),
+            "gate_reason": decision.reason,
+            "champion_version": str(champion.version) if champion else "none",
+        })
+
+    logger.info("training run finished", extra={
+        "run_id": run_id, "model_version": version.version, "promoted": decision.promoted, **result.summary(),
+    })
+    return TrainingOutcome(run_id, version, result.best.name, result.threshold, holdout_metrics, decision, champion)
+
+
+def _apply_gate(
+    context: TrainingContext,
+    challenger: ModelVersion,
+    holdout_features: pd.DataFrame,
+    holdout_target: pd.Series,
+    challenger_scores: Any,
+    challenger_threshold: float,
+) -> tuple[GateDecision, ModelVersion | None]:
+    """Re-score the current champion on this run's holdout, let the gate decide, then move the aliases.
+
+    Both models are scored on the same rows, so a change of data version cannot favour either. If the champion
+    cannot be loaded the error propagates: the run fails and the champion stays as it is, never replaced blindly.
+    """
+    registry = context.registry
+    champion = registry.get_by_alias(CHAMPION)
+    if champion is None:
+        decision = decide_promotion(holdout_target, challenger_scores, challenger_threshold, params=context.params.gate)
+    else:
+        champion_model = registry.load_model(champion.version)
+        decision = decide_promotion(
+            holdout_target, challenger_scores, challenger_threshold,
+            champion_model.predict_proba(holdout_features)[:, 1], float(champion_model.best_threshold_),
+            params=context.params.gate,
+        )
+    registry.set_version_tags(challenger.version, {"promoted": str(decision.promoted).lower(),
+                                                   "gate_reason": decision.reason})
+    if decision.promoted:
+        # previous first: if the second call fails, champion still points at a working model.
+        if champion is not None:
+            registry.set_alias(PREVIOUS, champion.version)
+        registry.set_alias(CHAMPION, challenger.version)
+    return decision, champion
 
 
 def _log_candidates(tracker: ExperimentTracker, parent_run_id: str, result: TrainingResult) -> None:

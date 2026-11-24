@@ -1,5 +1,6 @@
 """The training run end to end on the synthetic raw file, recorded by the in-memory tracker and registry."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +19,7 @@ from campaign_response.pipeline.train_pipeline import (
     flatten,
     run_training,
 )
-from campaign_response.registry.ports import CHALLENGER
+from campaign_response.registry.ports import CHALLENGER, CHAMPION, PREVIOUS
 from campaign_response.registry.promotion import GateParams
 
 REQUIREMENTS = Path(__file__).resolve().parents[2] / "requirements.txt"
@@ -119,14 +120,73 @@ def test_training_child_run_per_candidate(trained: tuple[TrainingContext, Traini
     assert tracker.json_artifact(outcome.run_id, "cv_results.json")["selected"] == "logistic_regression"
 
 
-def test_training_second_run_moves_challenger(raw_customers_file: Path) -> None:
+def test_training_first_model_becomes_champion(trained: tuple[TrainingContext, TrainingOutcome]) -> None:
+    context, outcome = trained
+    run = tracker_of(context).runs[outcome.run_id]
+
+    assert outcome.promoted and outcome.champion is None
+    assert context.registry.get_by_alias(CHAMPION) == outcome.version
+    assert context.registry.get_by_alias(PREVIOUS) is None
+    assert (run.tags["promoted"], run.tags["champion_version"]) == ("true", "none")
+    assert run.tags["gate_reason"] == outcome.decision.reason
+
+
+def test_training_equal_retrain_promoted_previous_kept(raw_customers_file: Path) -> None:
     context = make_context(raw_customers_file)
-    run_training(REQUEST, context)
+    first = run_training(REQUEST, context)
 
     second = run_training(REQUEST, context)
 
-    assert second.version.version == 2
+    assert second.version.version == 2 and second.promoted
+    assert second.champion == first.version
+    assert context.registry.get_by_alias(CHAMPION) == second.version
+    assert context.registry.get_by_alias(PREVIOUS) == first.version
     assert context.registry.get_by_alias(CHALLENGER) == second.version
+
+
+def test_training_rejected_challenger_leaves_champion(raw_customers_file: Path) -> None:
+    context = make_context(raw_customers_file)
+    first = run_training(REQUEST, context)
+    strict = replace(context, params=replace(context.params, gate=GateParams(min_recall=1.0)))
+
+    second = run_training(REQUEST, strict)
+
+    assert not second.promoted
+    assert second.decision.reason.startswith("recall:")
+    assert context.registry.get_by_alias(CHAMPION) == first.version
+    assert context.registry.get_by_alias(PREVIOUS) is None
+    assert context.registry.get_by_alias(CHALLENGER) == second.version
+    assert isinstance(context.registry, FakeRegistry)
+    assert context.registry.version_tags[2]["promoted"] == "false"
+    assert tracker_of(context).runs[second.run_id].tags["champion_version"] == "1"
+
+
+def test_training_rejected_first_model_no_champion(raw_customers_file: Path) -> None:
+    context = make_context(raw_customers_file)
+    strict = replace(context, params=replace(context.params, gate=GateParams(min_pr_auc=1.0)))
+
+    outcome = run_training(REQUEST, strict)
+
+    assert not outcome.promoted
+    assert context.registry.get_by_alias(CHAMPION) is None
+    assert context.registry.get_by_alias(CHALLENGER) == outcome.version
+
+
+def test_training_unloadable_champion_fails_run(raw_customers_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = make_context(raw_customers_file)
+    first = run_training(REQUEST, context)
+
+    def broken(version: int) -> None:
+        raise ValueError("refusing to load")
+
+    monkeypatch.setattr(context.registry, "load_model", broken)
+
+    with pytest.raises(ValueError, match="refusing to load"):
+        run_training(REQUEST, context)
+
+    assert context.registry.get_by_alias(CHAMPION) == first.version
+    parents = [run for run in tracker_of(context).runs.values() if run.parent_run_id is None]
+    assert [run.status for run in parents] == [FINISHED, FAILED]
 
 
 def test_training_invalid_data_fails_run(raw_customers: pd.DataFrame, tmp_path: Path) -> None:

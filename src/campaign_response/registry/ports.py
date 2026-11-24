@@ -23,6 +23,8 @@ PREVIOUS = "previous"
 class Classifier(Protocol):
     """What the gate and the API need from a loaded model; the tuned sklearn pipeline satisfies it."""
 
+    best_threshold_: float  # the tuned decision threshold, set by TunedThresholdClassifierCV
+
     def predict_proba(self, X: pd.DataFrame) -> NDArray[Any]: ...
 
     def predict(self, X: pd.DataFrame) -> NDArray[Any]: ...
