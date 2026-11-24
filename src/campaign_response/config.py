@@ -30,3 +30,4 @@ class Settings(BaseSettings):
     log_format: LogFormat = "text"
     data_dir: Path = Path("data")
     mlflow_tracking_uri: str = Field(default="http://localhost:5500", pattern=r"^https?://\S+$")
+    model_name: str = Field(default="campaign-response-classifier", pattern=r"^[A-Za-z0-9_.-]+$")

@@ -15,6 +15,7 @@ def test_settings_defaults() -> None:
     assert settings.log_format == "text"
     assert settings.data_dir == Path("data")
     assert settings.mlflow_tracking_uri == "http://localhost:5500"
+    assert settings.model_name == "campaign-response-classifier"
 
 
 def test_settings_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,6 +54,8 @@ def test_settings_env_var_beats_dotenv(tmp_path: Path, monkeypatch: pytest.Monke
         ("CRP_LOG_FORMAT", "xml"),
         ("CRP_MLFLOW_TRACKING_URI", "localhost:5500"),
         ("CRP_MLFLOW_TRACKING_URI", "ftp://mlflow:5000"),
+        ("CRP_MODEL_NAME", "model name with spaces"),
+        ("CRP_MODEL_NAME", "../other"),
     ],
 )
 def test_settings_invalid_value_ValidationError(variable: str, value: str, monkeypatch: pytest.MonkeyPatch) -> None:

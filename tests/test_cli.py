@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from fakes import FakeRegistry, FakeTracker
 
 from campaign_response.cli import build_parser, main
 from campaign_response.data import schema
 from campaign_response.data.io import load_processed
+from campaign_response.registry import mlflow_adapter
 
 RAW = Path("data/raw/marketing_campaign.csv")
 CLEANED = Path("data/processed/customers_clean.csv")
@@ -23,7 +25,7 @@ def isolated_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[No
     """Run in an empty directory with the repository's params.yaml, default settings, and restore the root logger."""
     shutil.copy(REPO_PARAMS, tmp_path / "params.yaml")
     monkeypatch.chdir(tmp_path)
-    for variable in ("CRP_LOG_LEVEL", "CRP_LOG_FORMAT", "CRP_DATA_DIR"):
+    for variable in ("CRP_LOG_LEVEL", "CRP_LOG_FORMAT", "CRP_DATA_DIR", "CRP_MLFLOW_TRACKING_URI", "CRP_MODEL_NAME"):
         monkeypatch.delenv(variable, raising=False)
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
@@ -132,3 +134,59 @@ def test_parser_defaults_follow_data_dir() -> None:
     args = build_parser(Path("elsewhere")).parse_args(["split"])
 
     assert args.train == Path("elsewhere/processed/train.csv")
+
+
+@pytest.fixture
+def fake_mlflow(monkeypatch: pytest.MonkeyPatch) -> tuple[FakeTracker, list[tuple[str, str]]]:
+    """Swap the MLflow adapters for the fakes and record the URI and model name the command passed."""
+    tracker, created = FakeTracker(), []
+    registry = FakeRegistry(tracker)
+
+    def make_registry(uri: str, name: str) -> FakeRegistry:
+        created.append((uri, name))
+        return registry
+
+    monkeypatch.setattr(mlflow_adapter, "MlflowTracker", lambda uri: tracker)
+    monkeypatch.setattr(mlflow_adapter, "MlflowRegistry", make_registry)
+    return tracker, created
+
+
+TRAIN = ["train", "--candidates", "logistic_regression", "--n-iter", "1", "--cv-folds", "3"]
+
+
+def test_train_prints_outcome_and_registers(
+    raw_customers_file: Path, fake_mlflow: tuple[FakeTracker, list[tuple[str, str]]],
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRP_MODEL_NAME", "test-model")
+
+    assert main([*TRAIN, "--raw", str(raw_customers_file)]) == 0
+
+    outcome = json.loads(capsys.readouterr().out)
+    assert (outcome["model_version"], outcome["best_candidate"]) == (1, "logistic_regression")
+    assert outcome["promoted"] is True
+    assert fake_mlflow[1] == [("http://localhost:5500", "test-model")]
+    parent = next(run for run in fake_mlflow[0].runs.values() if run.parent_run_id is None)
+    assert parent.tags["trained_by"] == "cli"
+    assert parent.params["request.cv_folds"] == "3"
+
+
+def test_train_invalid_data_exit_1(fake_mlflow: tuple[FakeTracker, list[tuple[str, str]]]) -> None:
+    write_raw(10)
+
+    assert main([*TRAIN, "--raw", str(RAW)]) == 1
+
+
+def test_train_unknown_candidate_rejected_by_parser(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["train", "--candidates", "svm"])
+
+    assert "invalid choice: 'svm'" in capsys.readouterr().err
+
+
+def test_parser_train_defaults_match_request() -> None:
+    args = build_parser(Path("data")).parse_args(["train"])
+
+    assert args.candidates == ["logistic_regression", "random_forest", "hist_gradient_boosting"]
+    assert (args.n_iter, args.cv_folds, args.seed) == (10, 5, 42)
+    assert args.raw == Path("data/raw/marketing_campaign.csv")
