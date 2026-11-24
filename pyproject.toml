@@ -12,10 +12,12 @@ dynamic = ["version"]
 # Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
     "matplotlib>=3.9",
+    "mlflow-skinny>=3.18,<3.19",   # client only; same minor version as the MLflow server image
     "pandas>=2.2",
     "pydantic-settings>=2.10",
     "pyyaml>=6.0",
     "scikit-learn>=1.6",
+    "skops>=0.16",   # MLflow saves sklearn models as skops: loading cannot run arbitrary code, unlike pickle
 ]
 
 [tool.setuptools.dynamic]

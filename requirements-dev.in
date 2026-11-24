@@ -13,3 +13,5 @@ pandas-stubs>=2.2
 types-pyyaml>=6.0
 pre-commit>=4.3
 dvc[s3]>=3.60
+# Full MLflow (server-side stores) so tests can run a local SQLite tracking store; the app needs only the client.
+mlflow>=3.18,<3.19
