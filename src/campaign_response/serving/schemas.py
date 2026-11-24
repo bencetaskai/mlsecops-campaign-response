@@ -101,6 +101,22 @@ class Prediction(BaseModel):
     label: Literal[0, 1]
 
 
+class HealthStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: Literal["ok", "unavailable"]
+    detail: str | None = None
+
+
+class VersionInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    app_version: str
+    git_sha: str
+    model_name: str
+    champion_version: int | None
+
+
 class PredictResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
