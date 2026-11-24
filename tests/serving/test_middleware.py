@@ -5,6 +5,7 @@ import logging
 import pytest
 from fakes import FakeRegistry, FakeTracker
 from fastapi.testclient import TestClient
+from serving_helpers import API_KEY
 
 from campaign_response.logging_setup import NO_CORRELATION_ID, CorrelationIdFilter, correlation_id_var
 from campaign_response.serving.app import ApiDependencies, create_app
@@ -13,7 +14,7 @@ from campaign_response.serving.middleware import REQUEST_ID_HEADER, request_id_f
 
 @pytest.fixture
 def client() -> TestClient:
-    app = create_app(ApiDependencies(FakeRegistry(FakeTracker()), "campaign-response-classifier", "abc123"))
+    app = create_app(ApiDependencies(FakeRegistry(FakeTracker()), "campaign-response-classifier", "abc123", API_KEY))
 
     @app.get("/echo")
     def echo() -> dict[str, str]:

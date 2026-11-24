@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 from fakes import FakeRegistry, FakeTracker
 from fastapi.testclient import TestClient
+from serving_helpers import API_KEY
 
 from campaign_response import __version__
 from campaign_response.registry.ports import CHAMPION
@@ -21,7 +22,7 @@ def registry() -> FakeRegistry:
 
 @pytest.fixture
 def client(registry: FakeRegistry) -> TestClient:
-    return TestClient(create_app(ApiDependencies(registry, "campaign-response-classifier", "fbdb428")))
+    return TestClient(create_app(ApiDependencies(registry, "campaign-response-classifier", "fbdb428", API_KEY)))
 
 
 def add_champion(registry: FakeRegistry) -> None:

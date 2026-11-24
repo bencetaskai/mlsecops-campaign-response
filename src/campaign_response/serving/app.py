@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass
 
 from fastapi import FastAPI, Response, status
+from pydantic import SecretStr
 
 from campaign_response import __version__
 from campaign_response.registry.ports import CHAMPION, ModelRegistry, ModelVersion
@@ -20,11 +21,16 @@ NO_CHAMPION = "no champion model yet; call POST /train"
 REGISTRY_UNREACHABLE = "model registry unreachable"
 
 
+class MissingApiKeyError(RuntimeError):
+    """The API was started without an API key; it fails closed instead of running unprotected."""
+
+
 @dataclass(frozen=True)
 class ApiDependencies:
     registry: ModelRegistry
     model_name: str
     git_sha: str
+    api_key: SecretStr | None
 
 
 def _champion(registry: ModelRegistry) -> tuple[ModelVersion | None, str | None]:
@@ -41,6 +47,8 @@ def _champion(registry: ModelRegistry) -> tuple[ModelVersion | None, str | None]
 
 
 def create_app(dependencies: ApiDependencies) -> FastAPI:
+    if dependencies.api_key is None:
+        raise MissingApiKeyError("no API key configured: set CRP_API_KEY or the crp_api_key Docker secret")
     app = FastAPI(
         title="Campaign response API",
         version=__version__,
