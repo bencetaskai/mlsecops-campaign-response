@@ -2,6 +2,7 @@
 
 prepare  raw file -> validation gate -> cleaning -> cleaned data + metrics
 split    cleaned data -> stratified train / holdout + metrics
+train    raw file -> training run in MLflow -> challenger, promoted to champion if the gate passes
 """
 
 import argparse
@@ -18,7 +19,14 @@ from campaign_response.data.io import load_processed, load_raw, write_processed
 from campaign_response.data.splitting import SplitParams, split_train_holdout
 from campaign_response.data.validation import validate_raw
 from campaign_response.logging_setup import configure_logging, new_correlation_id
-from campaign_response.params import load_params
+from campaign_response.modeling.candidates import BASELINE, CANDIDATE_NAMES
+from campaign_response.params import PipelineParams, load_params
+from campaign_response.pipeline.train_pipeline import (
+    DataValidationError,
+    TrainingContext,
+    TrainingRequest,
+    run_training,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +72,38 @@ def split(cleaned_path: Path, train_path: Path, holdout_path: Path, metrics_path
     return 0
 
 
+def train(raw: Path, request: TrainingRequest, params: PipelineParams, settings: Settings) -> int:
+    """One training run against the MLflow server in settings; prints the outcome as JSON.
+
+    Returns 0 whether or not the gate promotes the model (a rejection is a valid result), 1 if the data is invalid.
+    """
+    # Imported here: importing mlflow takes seconds, which prepare and split, run by DVC, should not pay.
+    from campaign_response.registry.mlflow_adapter import MlflowRegistry, MlflowTracker
+
+    context = TrainingContext(
+        tracker=MlflowTracker(settings.mlflow_tracking_uri),
+        registry=MlflowRegistry(settings.mlflow_tracking_uri, settings.model_name),
+        params=params,
+        raw_data_path=raw,
+        requirements_path=Path("requirements.txt"),
+    )
+    try:
+        outcome = run_training(request, context)
+    except DataValidationError as error:
+        logger.error("training refused", extra={"reason": str(error)})
+        return 1
+    print(json.dumps({
+        "run_id": outcome.run_id,
+        "model_version": outcome.version.version,
+        "best_candidate": outcome.best_candidate,
+        "threshold": round(outcome.threshold, 4),
+        "holdout_pr_auc": round(outcome.holdout.pr_auc, 4),
+        "promoted": outcome.promoted,
+        "gate_reason": outcome.decision.reason,
+    }, indent=2))
+    return 0
+
+
 def build_parser(data_dir: Path) -> argparse.ArgumentParser:
     raw, processed = data_dir / "raw", data_dir / "processed"
     parser = argparse.ArgumentParser(prog="campaign-response", description="Campaign response MLOps pipeline.")
@@ -80,6 +120,15 @@ def build_parser(data_dir: Path) -> argparse.ArgumentParser:
     split_parser.add_argument("--train", type=Path, default=processed / "train.csv")
     split_parser.add_argument("--holdout", type=Path, default=processed / "holdout.csv")
     split_parser.add_argument("--metrics", type=Path, default=Path("metrics/split.json"))
+
+    defaults = TrainingRequest()
+    train_parser = commands.add_parser("train", help="train candidates, register a challenger, apply the gate")
+    train_parser.add_argument("--raw", type=Path, default=raw / "marketing_campaign.csv")
+    train_parser.add_argument("--candidates", nargs="+", default=list(defaults.candidates),
+                              choices=[name for name in CANDIDATE_NAMES if name != BASELINE])
+    train_parser.add_argument("--n-iter", type=int, default=defaults.n_iter)
+    train_parser.add_argument("--cv-folds", type=int, default=defaults.cv_folds)
+    train_parser.add_argument("--seed", type=int, default=defaults.seed)
     return parser
 
 
@@ -95,4 +144,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     params = load_params(args.params)
     if args.command == "prepare":
         return prepare(args.raw, args.out, args.metrics, params.cleaning)
-    return split(args.cleaned, args.train, args.holdout, args.metrics, params.split)
+    if args.command == "split":
+        return split(args.cleaned, args.train, args.holdout, args.metrics, params.split)
+    request = TrainingRequest(tuple(args.candidates), args.n_iter, args.cv_folds, args.seed, trained_by="cli")
+    return train(args.raw, request, params, settings)

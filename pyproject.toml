@@ -12,10 +12,12 @@ dynamic = ["version"]
 # Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
     "matplotlib>=3.9",
+    "mlflow-skinny>=3.18,<3.19",   # client only; same minor version as the MLflow server image
     "pandas>=2.2",
     "pydantic-settings>=2.10",
     "pyyaml>=6.0",
     "scikit-learn>=1.6",
+    "skops>=0.16",   # MLflow saves sklearn models as skops: loading cannot run arbitrary code, unlike pickle
 ]
 
 [tool.setuptools.dynamic]
@@ -28,7 +30,7 @@ where = ["src"]
 minversion = "8.0"
 testpaths = ["tests"]
 # No editable install: its .pth file breaks on the accented Windows project path.
-pythonpath = ["src", "tools"]
+pythonpath = ["src", "tools", "tests"]   # tests: shared test doubles in tests/fakes.py
 addopts = [
     "-ra",
     "--strict-markers",
@@ -36,7 +38,18 @@ addopts = [
     "--import-mode=importlib",
 ]
 xfail_strict = true
-filterwarnings = ["error"]
+markers = [
+    "integration: runs against a real local MLflow (SQLite); part of the normal run, skip with -m 'not integration'",
+]
+filterwarnings = [
+    "error",
+    # Raised inside MLflow's own SQL store (only the local SQLite store of the adapter tests uses it); not our code.
+    "ignore:The ``noload`` loader strategy is deprecated:sqlalchemy.exc.SADeprecationWarning",
+    # MLflow's input-example code compares columns with range(); pandas 4 deprecates that. Limited to that module.
+    "ignore:Operation with range is deprecated:pandas.errors.Pandas4Warning:mlflow.models.utils",
+    # Emitted while MLflow imports its own pyfunc modules (their Any type hints), whatever our code does.
+    "ignore:.*Any type hint is inferred as AnyType:UserWarning:mlflow",
+]
 
 [tool.coverage.run]
 branch = true

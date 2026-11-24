@@ -1,5 +1,7 @@
 # First run: copy secrets_example/ to secrets/ and set your own values, then: docker compose up -d
 # Containers reach MinIO as http://minio:9000, the host (DVC CLI) as http://localhost:9000.
+# MLflow UI and API: http://localhost:5500 from the host, http://mlflow:5000 from containers.
+# Postgres has no host port: services reach it as postgres:5432; for a shell: docker compose exec postgres psql -U postgres
 
 name: campaign-response
 
@@ -14,8 +16,41 @@ secrets:
     file: ./secrets/minio_root_user.txt
   minio_root_password:
     file: ./secrets/minio_root_password.txt
+  mlflow_s3_secret_key:
+    file: ./secrets/mlflow_s3_secret_key.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  mlflow_db_password:
+    file: ./secrets/mlflow_db_password.txt
+  airflow_db_password:
+    file: ./secrets/airflow_db_password.txt
+  monitoring_db_password:
+    file: ./secrets/monitoring_db_password.txt
 
 services:
+  postgres:
+    image: postgres:16.16-alpine3.24@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+      - mlflow_db_password
+      - airflow_db_password
+      - monitoring_db_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      # Over TCP on purpose: while the init script runs, the entrypoint's temporary server listens on the Unix
+      # socket only, so the service turns healthy only after the databases exist.
+      test: ["CMD-SHELL", "pg_isready --host 127.0.0.1 --username postgres --dbname postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    logging: *logging
+
   minio:
     # Upstream MinIO no longer publishes images; this is the community rebuild used in the lab.
     image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
@@ -40,6 +75,36 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/mlflow.Dockerfile
+    image: campaign-response-mlflow:local
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: mlflow
+      # MLflow 3 rejects unknown Host headers (DNS rebinding); list every name the server is reached by.
+      MLFLOW_ALLOWED_HOSTS: mlflow:5000,localhost:5500,127.0.0.1:5500,localhost:5000
+    secrets:
+      - mlflow_db_password
+      - mlflow_s3_secret_key
+    ports:
+      - "127.0.0.1:5500:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # The image has no curl; Python's urllib does the same job.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    logging: *logging
+
   minio-init:
     image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
     entrypoint: ["/bin/sh", "/scripts/create-buckets.sh"]
@@ -49,10 +114,13 @@ services:
     secrets:
       - minio_root_user
       - minio_root_password
+      - mlflow_s3_secret_key
     volumes:
       - ./docker/minio/create-buckets.sh:/scripts/create-buckets.sh:ro
+      - ./docker/minio/mlflow-policy.json:/scripts/mlflow-policy.json:ro
     restart: "no"
     logging: *logging
 
 volumes:
+  postgres-data:
   minio-data:

@@ -1,5 +1,9 @@
 """Fixtures shared by all test folders."""
 
+from collections.abc import Iterator
+from pathlib import Path
+
+import mlflow
 import numpy as np
 import pandas as pd
 import pytest
@@ -32,11 +36,8 @@ def raw_frame() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="session")
-def customers() -> pd.DataFrame:
-    """240 cleaned synthetic customers, about 20% responders driven by spend and earlier acceptances.
-
-    Built from raw rows through clean(), so dtypes match the real pipeline; large enough for 3-fold stratified CV.
-    """
+def raw_customers() -> pd.DataFrame:
+    """240 raw synthetic customers with the schema dtypes, about 20% responders driven by spend and acceptances."""
     rows = 240
     rng = np.random.default_rng(7)
     spend = rng.gamma(2.0, 150.0, rows).round()
@@ -68,5 +69,34 @@ def customers() -> pd.DataFrame:
         "Z_Revenue": np.full(rows, 11),
         "Response": response,
     })
-    cleaned, _ = clean(pd.DataFrame(values).astype(dict(schema.RAW_DTYPES)))
+    return pd.DataFrame(values).astype(dict(schema.RAW_DTYPES))
+
+
+@pytest.fixture(scope="session")
+def customers(raw_customers: pd.DataFrame) -> pd.DataFrame:
+    """The synthetic customers after clean(), so dtypes match the real pipeline; enough rows for 3-fold CV."""
+    cleaned, _ = clean(raw_customers)
     return cleaned
+
+
+@pytest.fixture(scope="session")
+def raw_customers_file(raw_customers: pd.DataFrame, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The raw customers stored like the Kaggle file: tab-separated with CRLF line endings."""
+    path = tmp_path_factory.mktemp("raw") / "marketing_campaign.csv"
+    raw_customers.to_csv(path, sep="\t", index=False, lineterminator="\r\n")
+    return path
+
+
+@pytest.fixture(scope="module")
+def mlflow_tracking_uri(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """One store per test module, as creating its tables takes about a second.
+
+    The working directory moves to the temporary folder because a SQLite store without a server puts artifacts into
+    ./mlruns; the process-wide tracking URI, which MlflowTracker sets, is restored afterwards.
+    """
+    folder = tmp_path_factory.mktemp("mlflow")
+    previous = mlflow.get_tracking_uri()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(folder)
+        yield f"sqlite:///{(folder / 'mlflow.db').as_posix()}"
+    mlflow.set_tracking_uri(previous)

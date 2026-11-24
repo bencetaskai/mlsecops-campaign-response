@@ -148,6 +148,14 @@ jobs:
         run: docker compose config --quiet
       - name: Start MinIO and run the bucket init
         run: docker compose up --exit-code-from minio-init minio-init
+      - name: Start Postgres and check the service databases
+        run: |
+          docker compose up --detach --wait postgres
+          databases=$(docker compose exec -T postgres psql -U postgres -tAc \
+            "select count(*) from pg_database where datname in ('mlflow', 'airflow', 'monitoring')")
+          test "$databases" = 3
+      - name: Build and start MLflow until its healthcheck passes
+        run: docker compose up --build --detach --wait mlflow
       - name: Logs on failure
         if: failure()
         run: docker compose logs

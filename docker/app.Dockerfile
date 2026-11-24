@@ -26,6 +26,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install --requirement require
 COPY src/ src/
 
 ARG GIT_SHA=unknown
+# Also as an environment variable: training runs read it for their git_sha lineage tag.
+ENV GIT_SHA=${GIT_SHA}
 LABEL org.opencontainers.image.title="campaign-response" \
       org.opencontainers.image.source="https://github.com/bencetaskai/mlsecops-campaign-response" \
       org.opencontainers.image.revision="${GIT_SHA}"
