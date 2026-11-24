@@ -7,8 +7,9 @@ import pandas as pd
 import pytest
 from fakes import FAILED, FINISHED, FakeRegistry, FakeTracker
 
-from campaign_response.data.cleaning import CleaningParams
-from campaign_response.data.splitting import SplitParams
+from campaign_response.data.cleaning import CleaningParams, clean
+from campaign_response.data.io import load_processed
+from campaign_response.data.splitting import SplitParams, split_train_holdout
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline.train_pipeline import (
     EXPERIMENT,
@@ -101,10 +102,32 @@ def test_training_artifacts_logged(trained: tuple[TrainingContext, TrainingOutco
     artifacts = set(tracker_of(context).runs[outcome.run_id].artifacts)
 
     assert artifacts == {
-        "validation_report.json", "cleaning_report.json", "cv_results.json",
+        "validation_report.json", "cleaning_report.json", "cv_results.json", "gate_decision.json",
+        "reference/reference_sample.csv",
         "plots/pr_curve.png", "plots/roc_curve.png", "plots/confusion_matrix.png", "plots/calibration.png",
     }
     assert tracker_of(context).runs[outcome.run_id].model is not None
+
+
+def test_training_reference_sample_is_train_split(
+    trained: tuple[TrainingContext, TrainingOutcome], raw_customers: pd.DataFrame, tmp_path: Path
+) -> None:
+    context, outcome = trained
+    stored = tmp_path / "reference_sample.csv"
+    stored.write_bytes(tracker_of(context).runs[outcome.run_id].artifacts["reference/reference_sample.csv"])
+
+    train, _ = split_train_holdout(clean(raw_customers)[0], context.params.split)
+
+    pd.testing.assert_frame_equal(load_processed(stored), train.reset_index(drop=True))
+
+
+def test_training_gate_decision_logged(trained: tuple[TrainingContext, TrainingOutcome]) -> None:
+    context, outcome = trained
+
+    logged = tracker_of(context).json_artifact(outcome.run_id, "gate_decision.json")
+
+    assert logged == outcome.decision.as_dict()
+    assert logged["promoted"] is True and logged["champion"] is None
 
 
 def test_training_child_run_per_candidate(trained: tuple[TrainingContext, TrainingOutcome]) -> None:
@@ -159,6 +182,8 @@ def test_training_rejected_challenger_leaves_champion(raw_customers_file: Path) 
     assert isinstance(context.registry, FakeRegistry)
     assert context.registry.version_tags[2]["promoted"] == "false"
     assert tracker_of(context).runs[second.run_id].tags["champion_version"] == "1"
+    logged = tracker_of(context).json_artifact(second.run_id, "gate_decision.json")
+    assert logged["promoted"] is False and logged["champion"]["pr_auc"] == second.decision.champion.pr_auc
 
 
 def test_training_rejected_first_model_no_champion(raw_customers_file: Path) -> None:

@@ -6,6 +6,7 @@ against the in-memory fakes in tests.
 
 import logging
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -14,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 from campaign_response.data.cleaning import clean
-from campaign_response.data.io import load_raw
+from campaign_response.data.io import load_raw, write_processed
 from campaign_response.data.schema import ID_COLUMN, TARGET_COLUMN
 from campaign_response.data.splitting import split_train_holdout
 from campaign_response.data.validation import validate_raw
@@ -36,6 +37,11 @@ from campaign_response.registry.promotion import GateDecision, decide_promotion
 logger = logging.getLogger(__name__)
 
 EXPERIMENT = "campaign-response-training"
+GATE_DECISION_ARTIFACT = "gate_decision.json"
+# The Evidently reference for drift monitoring: this run's cleaned training rows, in the processed CSV format that
+# load_processed() reads back with the exact dtypes (Parquet would need pyarrow, 89 MB, in the runtime image).
+REFERENCE_ARTIFACT_DIR = "reference"
+REFERENCE_FILE = "reference_sample.csv"
 
 
 class DataValidationError(ValueError):
@@ -129,6 +135,7 @@ def run_training(request: TrainingRequest, context: TrainingContext) -> Training
             "baseline_cv_pr_auc": result.baseline.best.mean_pr_auc,
             **{f"holdout_{name}": value for name, value in holdout_metrics.as_dict().items()},
         })
+        _log_reference_sample(tracker, run_id, train)
         scores = result.model.predict_proba(holdout_features)[:, 1]
         for name, figure in evaluation_figures(holdout_target, scores, result.threshold).items():
             tracker.log_figure(run_id, figure, f"plots/{name}")
@@ -139,6 +146,7 @@ def run_training(request: TrainingRequest, context: TrainingContext) -> Training
         tracker.set_tags(run_id, {"best_candidate": result.best.name, "model_version": str(version.version)})
 
         decision, champion = _apply_gate(context, version, holdout_features, holdout_target, scores, result.threshold)
+        tracker.log_dict(run_id, decision.as_dict(), GATE_DECISION_ARTIFACT)
         tracker.set_tags(run_id, {
             "promoted": str(decision.promoted).lower(),
             "gate_reason": decision.reason,
@@ -183,6 +191,13 @@ def _apply_gate(
             registry.set_alias(PREVIOUS, champion.version)
         registry.set_alias(CHAMPION, challenger.version)
     return decision, champion
+
+
+def _log_reference_sample(tracker: ExperimentTracker, run_id: str, train: pd.DataFrame) -> None:
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / REFERENCE_FILE
+        write_processed(train, path)
+        tracker.log_file(run_id, path, REFERENCE_ARTIFACT_DIR)
 
 
 def _log_candidates(tracker: ExperimentTracker, parent_run_id: str, result: TrainingResult) -> None:
