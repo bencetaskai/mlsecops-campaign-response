@@ -13,9 +13,9 @@ stages:
       size: 4752
     - path: src/campaign_response/data
       hash: md5
-      md5: 4b8b00c63354fb8a9780190c3d3a06b6.dir
-      size: 60524
-      nfiles: 14
+      md5: fdab042f7f96f65d8ae4c6d0d3a18fd2.dir
+      size: 22994
+      nfiles: 7
     - path: src/campaign_response/params.py
       hash: md5
       md5: 771f33b7034c200af403f19556f79a45
