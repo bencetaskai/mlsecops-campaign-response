@@ -65,7 +65,7 @@ class FakeTracker:
     def set_tags(self, run_id: str, tags: Mapping[str, str]) -> None:
         self._get(run_id).tags.update({key: str(value) for key, value in tags.items()})
 
-    def log_dict(self, run_id: str, data: Mapping[str, Any] | list[Any], artifact_file: str) -> None:
+    def log_dict(self, run_id: str, data: Mapping[str, Any], artifact_file: str) -> None:
         self._get(run_id).artifacts[artifact_file] = json.dumps(data, indent=2).encode()
 
     def log_figure(self, run_id: str, figure: Figure, artifact_file: str) -> None:

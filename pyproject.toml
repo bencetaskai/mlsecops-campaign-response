@@ -38,7 +38,15 @@ addopts = [
     "--import-mode=importlib",
 ]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # Raised inside MLflow's own SQL store (only the local SQLite store of the adapter tests uses it); not our code.
+    "ignore:The ``noload`` loader strategy is deprecated:sqlalchemy.exc.SADeprecationWarning",
+    # MLflow's input-example code compares columns with range(); pandas 4 deprecates that. Limited to that module.
+    "ignore:Operation with range is deprecated:pandas.errors.Pandas4Warning:mlflow.models.utils",
+    # Emitted while MLflow imports its own pyfunc modules (their Any type hints), whatever our code does.
+    "ignore:.*Any type hint is inferred as AnyType:UserWarning:mlflow",
+]
 
 [tool.coverage.run]
 branch = true
