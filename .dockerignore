@@ -3,6 +3,7 @@
 
 !requirements.txt
 !src/
+!docker/mlflow/
 
 **/__pycache__
 **/*.py[cod]

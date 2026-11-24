@@ -1,0 +1,7 @@
+# Additions to the official MLflow image, installed with --no-deps: every package is pinned here and the build ends
+# with `pip check`, so nothing the image already has is upgraded behind our back.
+boto3==1.44.0
+botocore==1.44.0
+jmespath==1.1.0
+psycopg2-binary==2.9.13
+s3transfer==0.19.3
