@@ -6,13 +6,18 @@ belong here; they live in ``params.yaml`` (tracked by DVC).
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 LogFormat = Literal["text", "json"]
+
+MIN_API_KEY_LENGTH: Final = 32
+# Docker mounts secrets here. pydantic-settings warns about a missing folder (an error in our tests), so the folder
+# is used only where it exists, i.e. in the containers.
+DOCKER_SECRETS_DIR: Final = Path("/run/secrets")
 
 
 class Settings(BaseSettings):
@@ -24,6 +29,10 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         # Rejects unknown keys in .env and kwargs, but NOT misspelled environment variables (pydantic-settings).
         extra="forbid",
+        # A file named like the variable, e.g. /run/secrets/crp_api_key, sets that field.
+        secrets_dir=DOCKER_SECRETS_DIR if DOCKER_SECRETS_DIR.is_dir() else None,
+        # Validation errors would otherwise quote the input, e.g. a slightly too short API key, into the log.
+        hide_input_in_errors=True,
     )
 
     log_level: LogLevel = "INFO"
@@ -31,3 +40,18 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     mlflow_tracking_uri: str = Field(default="http://localhost:5500", pattern=r"^https?://\S+$")
     model_name: str = Field(default="campaign-response-classifier", pattern=r"^[A-Za-z0-9_.-]+$")
+    # Optional here, as the CLI needs no key; the API refuses to start without one.
+    api_key: Annotated[SecretStr, Field(min_length=MIN_API_KEY_LENGTH)] | None = None
+    params_path: Path = Path("params.yaml")
+    api_host: str = "127.0.0.1"
+    api_port: int = Field(default=8000, ge=1, le=65535)
+    model_cache_ttl_seconds: float = Field(default=30.0, gt=0)
+    # No host: the prediction log goes to a SQLite file in data_dir, so the API also runs without compose.
+    prediction_db_host: str | None = None
+    prediction_db_port: int = Field(default=5432, ge=1, le=65535)
+    prediction_db_name: str = "monitoring"
+    prediction_db_user: str = "monitoring"
+    # From the Docker secret file crp_prediction_db_password, never part of a URL in the environment.
+    prediction_db_password: SecretStr | None = None
+    # Where the bootstrap job and the smoke script reach the API.
+    api_url: str = Field(default="http://localhost:8000", pattern=r"^https?://\S+$")

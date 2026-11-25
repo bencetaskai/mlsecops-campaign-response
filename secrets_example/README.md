@@ -10,3 +10,10 @@ Remove-Item secrets\README.md
 ```
 
 Each file holds exactly one value, without quotes. A trailing newline is fine.
+
+`api_key.txt` is the key for `X-API-Key` on `/train` and `/predict`; the API refuses to start with fewer than 32
+characters. Generate one with Python, which writes plain UTF-8 (PowerShell's `>` would write UTF-16):
+
+```powershell
+python -c "import pathlib, secrets; pathlib.Path('secrets/api_key.txt').write_text(secrets.token_urlsafe(32))"
+```

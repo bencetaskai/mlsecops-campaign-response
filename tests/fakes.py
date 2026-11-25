@@ -1,12 +1,13 @@
-"""In-memory test doubles for the tracker and registry ports, used wherever a test needs MLflow behaviour.
+"""In-memory test doubles for the tracker, registry and prediction store ports, so tests need no MLflow or database.
 
 They follow MLflow's rules that matter to our code: params cannot change once logged, a failed block marks the run
 failed, versions count up from 1, and an alias points at exactly one existing version. The contract tests in
-tests/registry run the same checks against these fakes and against a real local MLflow.
+tests/registry run the same checks against these fakes and against a real local MLflow; those in tests/storage do
+the same for the store and SQLite.
 """
 
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +16,8 @@ from typing import Any
 import pandas as pd
 from matplotlib.figure import Figure
 
-from campaign_response.registry.ports import Classifier, ModelVersion
+from campaign_response.registry.ports import Classifier, ModelVersion, VersionDetails
+from campaign_response.storage.prediction_store import COLUMNS, PredictionRecord, check_limit, to_row
 
 RUNNING, FINISHED, FAILED = "RUNNING", "FINISHED", "FAILED"
 
@@ -120,6 +122,11 @@ class FakeRegistry:
         self._get(version)
         self.version_tags[version].update({key: str(value) for key, value in tags.items()})
 
+    def version_details(self, version: int) -> VersionDetails:
+        found = self._get(version)
+        run = self.tracker.runs[found.run_id]
+        return VersionDetails(found, dict(self.version_tags[version]), dict(run.tags), dict(run.metrics))
+
     def load_model(self, version: int) -> Classifier:
         model = self.tracker.runs[self._get(version).run_id].model
         assert model is not None
@@ -129,3 +136,20 @@ class FakeRegistry:
         if not 1 <= version <= len(self.versions):
             raise KeyError(f"unknown version {version} of {self.name!r}")
         return self.versions[version - 1]
+
+
+class FakePredictionStore:
+    """Rows in a list, numbered like an auto-increment key; a request is stored completely or not at all."""
+
+    def __init__(self) -> None:
+        self.rows: list[dict[str, Any]] = []
+
+    def save(self, records: Sequence[PredictionRecord]) -> None:
+        rows = [to_row(record) for record in records]
+        for row in rows:
+            self.rows.append({"log_id": len(self.rows) + 1, **row})
+
+    def latest(self, limit: int, model_version: int | None = None) -> pd.DataFrame:
+        check_limit(limit)
+        matching = [row for row in self.rows if model_version is None or row["model_version"] == model_version]
+        return pd.DataFrame(matching[-limit:], columns=list(COLUMNS))

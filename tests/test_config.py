@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from campaign_response.config import Settings
+from campaign_response.config import MIN_API_KEY_LENGTH, Settings
+
+KEY = "k" * MIN_API_KEY_LENGTH
 
 
 def test_settings_defaults() -> None:
@@ -16,6 +18,7 @@ def test_settings_defaults() -> None:
     assert settings.data_dir == Path("data")
     assert settings.mlflow_tracking_uri == "http://localhost:5500"
     assert settings.model_name == "campaign-response-classifier"
+    assert settings.api_key is None
 
 
 def test_settings_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,3 +79,31 @@ def test_settings_dotenv_typo_ValidationError(tmp_path: Path) -> None:
 def test_settings_unknown_argument_ValidationError() -> None:
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         Settings(_env_file=None, log_levle="DEBUG")
+
+
+def test_settings_api_key_from_secret_file(tmp_path: Path) -> None:
+    (tmp_path / "crp_api_key").write_text(KEY + "\n", encoding="utf-8")
+
+    settings = Settings(_env_file=None, _secrets_dir=tmp_path)
+
+    assert settings.api_key is not None and settings.api_key.get_secret_value() == KEY
+    assert KEY not in repr(settings)
+
+
+def test_settings_api_key_env_beats_secret_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "crp_api_key").write_text(KEY, encoding="utf-8")
+    monkeypatch.setenv("CRP_API_KEY", KEY.upper())
+
+    settings = Settings(_env_file=None, _secrets_dir=tmp_path)
+
+    assert settings.api_key is not None and settings.api_key.get_secret_value() == KEY.upper()
+
+
+def test_settings_short_api_key_hidden_in_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    short = "x" * (MIN_API_KEY_LENGTH - 1)
+    monkeypatch.setenv("CRP_API_KEY", short)
+
+    with pytest.raises(ValidationError, match="at least 32") as error:
+        Settings(_env_file=None)
+
+    assert short not in str(error.value)
