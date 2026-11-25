@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 from typing import Any
 
 import pandas as pd
@@ -10,8 +11,10 @@ from fakes import FakePredictionStore, FakeRegistry, FakeTracker
 from fastapi.testclient import TestClient
 from serving_helpers import AUTH, MODEL_NAME, NOW, add_champion, make_dependencies, payload_records
 from sklearn.model_selection import TunedThresholdClassifierCV
+from sqlalchemy.exc import OperationalError
 
 from campaign_response.data.schema import FEATURE_COLUMNS
+from campaign_response.logging_setup import CorrelationIdFilter
 from campaign_response.registry.ports import CHAMPION
 from campaign_response.serving.app import create_app
 from campaign_response.serving.middleware import REQUEST_ID_HEADER
@@ -148,3 +151,76 @@ def test_predict_in_openapi_with_security(client: TestClient) -> None:
 
     assert operation["security"] == [{"APIKeyHeader": []}]
     assert {"200", "401", "422", "503"} <= set(operation["responses"])
+
+
+def fail_with_customer_data(*args: object) -> None:
+    raise OperationalError("INSERT INTO prediction_log ...", {"Income": 777777}, ConnectionError("db down"))
+
+
+def errors(logs: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [record for record in logs.records if record.levelno == logging.ERROR]
+
+
+@pytest.fixture
+def logs(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
+    caplog.handler.addFilter(CorrelationIdFilter())
+    caplog.set_level(logging.INFO)
+    return caplog
+
+
+def test_predict_log_write_fails_still_200(
+    client: TestClient, registry: FakeRegistry, store: FakePredictionStore, model: TunedThresholdClassifierCV,
+    records: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch, logs: pytest.LogCaptureFixture,
+) -> None:
+    add_champion(registry, model)
+    monkeypatch.setattr(store, "save", fail_with_customer_data)
+
+    response = client.post("/predict", json={"records": records}, headers={**AUTH, REQUEST_ID_HEADER: "req-9"})
+
+    assert response.status_code == 200
+    assert len(response.json()["predictions"]) == 3
+    [error] = errors(logs)
+    assert error.__dict__["correlation_id"] == "req-9"
+    assert (error.__dict__["error_type"], error.__dict__["error_code"], error.__dict__["n_records"]) == (
+        "OperationalError", "e3q8", 3,
+    )
+    assert "777777" not in logs.text
+    assert len(inference_runs(registry)) == 1
+
+
+def test_predict_mlflow_unreachable_still_200(
+    client: TestClient, registry: FakeRegistry, store: FakePredictionStore, model: TunedThresholdClassifierCV,
+    records: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch, logs: pytest.LogCaptureFixture,
+) -> None:
+    add_champion(registry, model)
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise ConnectionError("cannot reach http://user:secret@mlflow:5000")
+
+    monkeypatch.setattr(registry.tracker, "run", refuse)
+
+    response = client.post("/predict", json={"records": records}, headers={**AUTH, REQUEST_ID_HEADER: "req-10"})
+
+    assert response.status_code == 200
+    assert len(store.rows) == 3
+    [error] = errors(logs)
+    assert (error.message, error.__dict__["error_type"], error.__dict__["error_code"]) == (
+        "inference run logging failed", "ConnectionError", None,
+    )
+    assert error.__dict__["correlation_id"] == "req-10"
+    assert "secret" not in logs.text
+
+
+def test_predict_artifact_upload_fails_run_marked_failed(
+    client: TestClient, registry: FakeRegistry, model: TunedThresholdClassifierCV, records: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch, logs: pytest.LogCaptureFixture,
+) -> None:
+    add_champion(registry, model)
+    monkeypatch.setattr(registry.tracker, "log_file", fail_with_customer_data)
+
+    response = client.post("/predict", json={"records": records}, headers=AUTH)
+
+    assert response.status_code == 200
+    [run] = inference_runs(registry)
+    assert run.status == "FAILED"
+    assert [error.message for error in errors(logs)] == ["inference run logging failed"]

@@ -18,7 +18,7 @@ from campaign_response.registry.ports import CHAMPION, ExperimentTracker, ModelR
 from campaign_response.serving.middleware import request_context
 from campaign_response.serving.model_cache import ChampionCache, ModelUnavailableError
 from campaign_response.serving.predict_service import PredictService
-from campaign_response.serving.prediction_logging import log_inference_run, prediction_records
+from campaign_response.serving.prediction_logging import log_inference_run, prediction_records, save_predictions
 from campaign_response.serving.schemas import (
     HealthStatus,
     Prediction,
@@ -115,7 +115,7 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
             scored = predict_service.predict(body.records)
         except ModelUnavailableError as error:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
-        dependencies.store.save(prediction_records(request_id, dependencies.clock(), body, scored))
+        save_predictions(dependencies.store, prediction_records(request_id, dependencies.clock(), body, scored))
         # About 0.4 s against the compose MLflow, so it runs after the response instead of delaying it.
         background.add_task(log_inference_run, dependencies.tracker, request_id, body, scored)
         logger.info("scored request", extra={
