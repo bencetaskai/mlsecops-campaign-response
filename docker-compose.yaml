@@ -168,6 +168,9 @@ services:
       - source: api_key
         target: crp_api_key
     read_only: true
+    # Even this short job needs /tmp: matplotlib, imported with the shared schemas, writes its cache there.
+    tmpfs:
+      - /tmp
     cap_drop:
       - ALL
     security_opt:
