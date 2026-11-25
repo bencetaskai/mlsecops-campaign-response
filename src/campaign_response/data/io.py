@@ -4,6 +4,7 @@ import hashlib
 import logging
 from collections.abc import Hashable
 from pathlib import Path
+from typing import BinaryIO
 
 import pandas as pd
 
@@ -42,12 +43,15 @@ def write_processed(frame: pd.DataFrame, path: Path) -> None:
     logger.info("wrote processed data", extra={"path": str(path), "rows": len(frame), "columns": frame.shape[1]})
 
 
-def load_processed(path: Path) -> pd.DataFrame:
-    """Read a file written by write_processed back with the cleaned dtypes (raw dtypes, date parsed)."""
+def load_processed(source: Path | BinaryIO) -> pd.DataFrame:
+    """Read data written by write_processed back with the cleaned dtypes (raw dtypes, date parsed).
+
+    source is a file or an open binary stream, e.g. a reference sample downloaded from MLflow into memory.
+    """
     dtypes: dict[Hashable, str] = {
         column: dtype for column, dtype in RAW_DTYPES.items() if column not in {DATE_COLUMN, *CONSTANT_COLUMNS}
     }
-    frame = pd.read_csv(path, dtype=dtypes, encoding="utf-8")
+    frame = pd.read_csv(source, dtype=dtypes, encoding="utf-8")
     frame[DATE_COLUMN] = pd.to_datetime(frame[DATE_COLUMN], format="%Y-%m-%d")
     return frame
 
