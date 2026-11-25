@@ -11,11 +11,12 @@ authors = [{ name = "Bence TÁSKAI" }]
 dynamic = ["version"]
 # Lower bounds only; exact pins are generated into requirements.txt.
 dependencies = [
+    "evidently>=0.7.23,<0.8",   # drift reports; 0.7 changed the API, so the minor version is pinned
     "fastapi>=0.115",   # REST API; Starlette and Pydantic come with it
     "httpx2>=2.16",   # HTTP client of the bootstrap job and the smoke script; tested with its MockTransport
     "matplotlib>=3.9",
     "mlflow-skinny>=3.18,<3.19",   # client only; same minor version as the MLflow server image
-    "pandas>=2.2",
+    "pandas>=2.2,<3",   # Evidently imports a pandas internal that pandas 3 removed (02 §6)
     "psycopg[binary]>=3.2",   # Postgres driver for the prediction log; SQLAlchemy 2.1's default dialect
     "pydantic-settings>=2.10",
     "pyyaml>=6.0",
@@ -50,8 +51,6 @@ filterwarnings = [
     "error",
     # Raised inside MLflow's own SQL store (only the local SQLite store of the adapter tests uses it); not our code.
     "ignore:The ``noload`` loader strategy is deprecated:sqlalchemy.exc.SADeprecationWarning",
-    # MLflow's input-example code compares columns with range(); pandas 4 deprecates that. Limited to that module.
-    "ignore:Operation with range is deprecated:pandas.errors.Pandas4Warning:mlflow.models.utils",
     # Emitted while MLflow imports its own pyfunc modules (their Any type hints), whatever our code does.
     "ignore:.*Any type hint is inferred as AnyType:UserWarning:mlflow",
 ]

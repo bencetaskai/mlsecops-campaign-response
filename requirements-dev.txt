@@ -29,6 +29,7 @@ annotated-doc==0.0.7
     # via
     #   -r requirements.txt
     #   fastapi
+    #   typer
 annotated-types==0.8.0
     # via
     #   -r requirements.txt
@@ -41,11 +42,16 @@ anyio==4.16.0
     # via
     #   -r requirements.txt
     #   fastapi
+    #   httpx
     #   httpx2
+    #   litestar
     #   mlflow-skinny
     #   starlette
+    #   watchfiles
 appdirs==1.4.4
-    # via iterative-telemetry
+    # via
+    #   -r requirements.txt
+    #   iterative-telemetry
 asyncssh==2.24.1
     # via scmrepo
 atpublic==9.0.0
@@ -77,6 +83,9 @@ certifi==2026.11.20
     # via
     #   -r requirements.txt
     #   databricks-sdk
+    #   evidently
+    #   httpcore
+    #   httpx
     #   requests
 cffi==2.1.1
     # via
@@ -98,7 +107,10 @@ click==8.5.1
     #   click-repl
     #   flask
     #   gto
+    #   litestar
     #   mlflow-skinny
+    #   nltk
+    #   rich-click
     #   uvicorn
 click-didyoumean==0.3.1
     # via celery
@@ -113,9 +125,12 @@ cloudpickle==3.1.3
     #   mlflow-skinny
 colorama==0.4.6
     # via
+    #   -r requirements.txt
     #   dvc
     #   pytest
+    #   rich-click
     #   tqdm
+    #   typer
 configobj==5.0.9
     # via dvc
 contourpy==1.4.0
@@ -128,6 +143,7 @@ cryptography==50.0.2
     # via
     #   -r requirements.txt
     #   asyncssh
+    #   evidently
     #   google-auth
     #   mlflow
 cycler==0.12.1
@@ -139,6 +155,14 @@ databricks-sdk==0.170.0
     #   -r requirements.txt
     #   mlflow-skinny
     #   mlflow-tracing
+defusedxml==0.7.1
+    # via
+    #   -r requirements.txt
+    #   nltk
+deprecation==2.1.0
+    # via
+    #   -r requirements.txt
+    #   evidently
 dictdiffer==0.10.0
     # via dvc-data
 diskcache==5.6.3
@@ -147,6 +171,7 @@ distlib==0.4.4
     # via virtualenv
 distro==1.9.0
     # via
+    #   -r requirements.txt
     #   dvc
     #   iterative-telemetry
 docker==7.2.0
@@ -178,14 +203,25 @@ dvc-studio-client==0.23.0
     # via dvc
 dvc-task==0.40.2
     # via dvc
+dynaconf==3.3.5
+    # via
+    #   -r requirements.txt
+    #   evidently
 entrypoints==0.4.2
     # via gto
+evidently==0.7.23
+    # via -r requirements.txt
+faker==40.63.0
+    # via
+    #   -r requirements.txt
+    #   polyfactory
 fastapi==0.165.0
     # via
     #   -r requirements.txt
     #   mlflow-skinny
-filelock==4.2.10
+filelock==4.3.1
     # via
+    #   -r requirements.txt
     #   iterative-telemetry
     #   python-discovery
     #   virtualenv
@@ -207,17 +243,23 @@ fonttools==4.68.0
     # via
     #   -r requirements.txt
     #   matplotlib
+formulaic==1.2.2
+    # via
+    #   -r requirements.txt
+    #   statsmodels
 frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
 fsspec==2026.9.0
     # via
+    #   -r requirements.txt
     #   dvc
     #   dvc-data
     #   dvc-http
     #   dvc-objects
     #   dvc-s3
+    #   evidently
     #   s3fs
     #   scmrepo
 funcy==2.1
@@ -256,12 +298,25 @@ gunicorn==26.2.0 ; sys_platform != 'win32'
 h11==0.16.0
     # via
     #   -r requirements.txt
+    #   httpcore
     #   httpcore2
     #   uvicorn
+httpcore==1.0.9
+    # via
+    #   -r requirements.txt
+    #   httpx
 httpcore2==2.16.2 ; sys_platform != 'emscripten'
     # via
     #   -r requirements.txt
     #   httpx2
+httptools==0.9.0
+    # via
+    #   -r requirements.txt
+    #   uvicorn
+httpx==0.28.1
+    # via
+    #   -r requirements.txt
+    #   litestar
 httpx2==2.16.2
     # via
     #   -r requirements.txt
@@ -282,6 +337,7 @@ idna==3.20
     # via
     #   -r requirements.txt
     #   anyio
+    #   httpx
     #   httpx2
     #   requests
     #   yarl
@@ -291,8 +347,15 @@ importlib-metadata==10.2.0
     #   mlflow-skinny
 iniconfig==2.3.1
     # via pytest
+interface-meta==2.0.1
+    # via
+    #   -r requirements.txt
+    #   formulaic
 iterative-telemetry==0.0.10
-    # via dvc
+    # via
+    #   -r requirements.txt
+    #   dvc
+    #   evidently
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
@@ -304,6 +367,7 @@ jmespath==1.1.0
 joblib==1.6.0
     # via
     #   -r requirements.txt
+    #   nltk
     #   scikit-learn
 kiwisolver==1.5.1
     # via
@@ -318,10 +382,20 @@ lazy-importer==0.1.0 ; python_full_version < '3.15'
     # via
     #   -r requirements.txt
     #   importlib-metadata
+litestar==2.25.0
+    # via
+    #   -r requirements.txt
+    #   evidently
+litestar-htmx==0.5.0
+    # via
+    #   -r requirements.txt
+    #   litestar
 mako==1.4.3
     # via alembic
 markdown-it-py==4.3.0
-    # via rich
+    # via
+    #   -r requirements.txt
+    #   rich
 markupsafe==3.0.4
     # via
     #   flask
@@ -335,7 +409,9 @@ matplotlib==3.11.2
 mccabe==0.7.0
     # via flake8
 mdurl==0.1.2
-    # via markdown-it-py
+    # via
+    #   -r requirements.txt
+    #   markdown-it-py
 mlflow==3.18.0
     # via -r requirements-dev.in
 mlflow-skinny==3.18.0
@@ -344,17 +420,36 @@ mlflow-skinny==3.18.0
     #   mlflow
 mlflow-tracing==3.18.0
     # via mlflow
+msgspec==0.22.0
+    # via
+    #   -r requirements.txt
+    #   litestar
 multidict==7.2.1
     # via
+    #   -r requirements.txt
     #   aiobotocore
     #   aiohttp
+    #   litestar
     #   yarl
+multipart==2.0.1
+    # via
+    #   -r requirements.txt
+    #   litestar
+mypy-extensions==1.2.0
+    # via
+    #   -r requirements.txt
+    #   typing-inspect
 narwhals==2.29.0
     # via
     #   -r requirements.txt
+    #   formulaic
     #   scikit-learn
 networkx==3.7
     # via dvc
+nltk==3.10.4
+    # via
+    #   -r requirements.txt
+    #   evidently
 nodeenv==1.12.0
     # via
     #   pre-commit
@@ -363,13 +458,17 @@ numpy==2.5.5
     # via
     #   -r requirements.txt
     #   contourpy
+    #   evidently
+    #   formulaic
     #   matplotlib
     #   mlflow
     #   pandas
     #   pandas-stubs
+    #   patsy
     #   scikit-learn
     #   scipy
     #   skops
+    #   statsmodels
 omegaconf==2.3.1
     # via
     #   dvc
@@ -385,6 +484,7 @@ opentelemetry-api==1.45.2
 opentelemetry-proto==1.45.2
     # via
     #   -r requirements.txt
+    #   evidently
     #   mlflow-skinny
     #   mlflow-tracing
 opentelemetry-sdk==1.45.2
@@ -403,24 +503,35 @@ orjson==3.13.0 ; implementation_name == 'cpython'
 packaging==26.3
     # via
     #   -r requirements.txt
+    #   deprecation
     #   dvc
     #   hydra-core
     #   matplotlib
     #   mlflow-skinny
     #   mlflow-tracing
+    #   patsy
+    #   plotly
     #   pytest
     #   skops
+    #   statsmodels
     #   virtualenv
-pandas==3.1.1
+pandas==2.3.3
     # via
     #   -r requirements.txt
+    #   evidently
+    #   formulaic
     #   mlflow
-pandas-stubs==3.1.0.261029
+    #   statsmodels
+pandas-stubs==2.3.3.260113
     # via -r requirements-dev.in
 pathspec==1.1.1
     # via
     #   dvc
     #   scmrepo
+patsy==1.0.3
+    # via
+    #   -r requirements.txt
+    #   statsmodels
 pillow==13.0.0
     # via
     #   -r requirements.txt
@@ -429,8 +540,16 @@ platformdirs==4.14.5
     # via
     #   dvc
     #   virtualenv
+plotly==5.24.1
+    # via
+    #   -r requirements.txt
+    #   evidently
 pluggy==1.7.0
     # via pytest
+polyfactory==3.5.0
+    # via
+    #   -r requirements.txt
+    #   litestar
 pre-commit==4.7.0
     # via -r requirements-dev.in
 prettytable==3.19.0
@@ -459,7 +578,10 @@ psycopg==3.3.9
 psycopg-binary==3.3.9 ; implementation_name != 'pypy'
     # via -r requirements.txt
 pyarrow==26.0.1
-    # via mlflow
+    # via
+    #   -r requirements.txt
+    #   mlflow
+    #   pandas
 pyasn1==0.6.5
     # via
     #   -r requirements.txt
@@ -477,11 +599,13 @@ pycparser==3.12 ; implementation_name != 'PyPy'
 pydantic==2.14.3
     # via
     #   -r requirements.txt
+    #   evidently
     #   fastapi
     #   gto
     #   mlflow-skinny
     #   mlflow-tracing
     #   pydantic-settings
+    #   typer
 pydantic-core==2.50.4
     # via
     #   -r requirements.txt
@@ -498,6 +622,7 @@ pygit2==1.21.0
     # via scmrepo
 pygments==2.21.0
     # via
+    #   -r requirements.txt
     #   pytest
     #   rich
 pygtrie==2.6.2
@@ -534,10 +659,15 @@ python-dotenv==1.2.4
     #   -r requirements.txt
     #   mlflow-skinny
     #   pydantic-settings
+    #   uvicorn
 python-multipart==0.0.34
     # via
     #   -r requirements.txt
     #   mlflow-skinny
+pytz==2026.6
+    # via
+    #   -r requirements.txt
+    #   pandas
 pywin32==312 ; sys_platform == 'win32'
     # via
     #   docker
@@ -545,9 +675,16 @@ pywin32==312 ; sys_platform == 'win32'
 pyyaml==6.0.3
     # via
     #   -r requirements.txt
+    #   evidently
+    #   litestar
     #   mlflow-skinny
     #   omegaconf
     #   pre-commit
+    #   uvicorn
+regex==2026.11.24
+    # via
+    #   -r requirements.txt
+    #   nltk
 requests==2.34.2
     # via
     #   -r requirements.txt
@@ -555,12 +692,22 @@ requests==2.34.2
     #   docker
     #   dvc
     #   dvc-studio-client
+    #   evidently
     #   iterative-telemetry
     #   mlflow-skinny
 rich==15.0.0
     # via
+    #   -r requirements.txt
     #   dvc
+    #   evidently
     #   gto
+    #   litestar
+    #   rich-click
+    #   typer
+rich-click==1.9.9
+    # via
+    #   -r requirements.txt
+    #   litestar
 ruamel-yaml==0.19.1
     # via
     #   dvc
@@ -570,20 +717,28 @@ s3fs==2026.9.0
 scikit-learn==1.9.1
     # via
     #   -r requirements.txt
+    #   evidently
     #   mlflow
     #   skops
 scipy==1.18.1
     # via
     #   -r requirements.txt
+    #   evidently
+    #   formulaic
     #   mlflow
     #   scikit-learn
     #   skops
+    #   statsmodels
 scmrepo==3.6.2
     # via
     #   dvc
     #   gto
 semver==3.1.2
     # via gto
+shellingham==1.5.4
+    # via
+    #   -r requirements.txt
+    #   typer
 shortuuid==1.0.13
     # via
     #   dvc
@@ -602,6 +757,10 @@ smmap==5.0.3
     # via
     #   -r requirements.txt
     #   gitdb
+sniffio==1.3.1
+    # via
+    #   -r requirements.txt
+    #   litestar
 sortedcontainers==2.4.0
     # via hypothesis
 sqlalchemy==2.1.9
@@ -620,10 +779,18 @@ starlette==1.10.0
     #   -r requirements.txt
     #   fastapi
     #   mlflow-skinny
+statsmodels==0.15.0
+    # via
+    #   -r requirements.txt
+    #   evidently
 tabulate==0.10.0
     # via
     #   dvc
     #   gto
+tenacity==9.2.1
+    # via
+    #   -r requirements.txt
+    #   plotly
 threadpoolctl==3.8.0
     # via
     #   -r requirements.txt
@@ -632,15 +799,23 @@ tomlkit==0.15.2
     # via dvc
 tqdm==4.70.1
     # via
+    #   -r requirements.txt
     #   dvc
     #   dvc-data
     #   fsspec
+    #   nltk
     #   scmrepo
 truststore==0.10.5 ; sys_platform != 'emscripten'
     # via
     #   -r requirements.txt
     #   httpcore2
     #   httpx2
+typer==0.29.2
+    # via
+    #   -r requirements.txt
+    #   evidently
+types-pytz==2026.6.0.20261122
+    # via pandas-stubs
 types-pyyaml==6.0.12.20261113
     # via -r requirements-dev.in
 typing-extensions==4.16.0
@@ -653,12 +828,15 @@ typing-extensions==4.16.0
     #   asyncssh
     #   click-repl
     #   fastapi
+    #   formulaic
     #   graphene
     #   httpx2
+    #   litestar
     #   mlflow-skinny
     #   opentelemetry-api
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+    #   polyfactory
     #   psycopg
     #   pydantic
     #   pydantic-core
@@ -666,22 +844,32 @@ typing-extensions==4.16.0
     #   pyright
     #   sqlalchemy
     #   starlette
+    #   typing-inspect
     #   typing-inspection
+typing-inspect==0.9.0
+    # via
+    #   -r requirements.txt
+    #   evidently
 typing-inspection==0.4.5
     # via
     #   -r requirements.txt
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2026.6 ; sys_platform == 'emscripten' or sys_platform == 'win32'
+tzdata==2026.6
     # via
     #   -r requirements.txt
+    #   faker
     #   kombu
     #   pandas
     #   psycopg
     #   tzlocal
 tzlocal==5.4.5
     # via celery
+ujson==6.1.0
+    # via
+    #   -r requirements.txt
+    #   evidently
 urllib3==2.8.0
     # via
     #   -r requirements.txt
@@ -689,11 +877,21 @@ urllib3==2.8.0
     #   databricks-sdk
     #   docker
     #   dulwich
+    #   evidently
     #   requests
+uuid6==2025.0.1
+    # via
+    #   -r requirements.txt
+    #   evidently
 uvicorn==0.54.0
     # via
     #   -r requirements.txt
+    #   evidently
     #   mlflow-skinny
+uvloop==0.23.0 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
+    # via
+    #   -r requirements.txt
+    #   uvicorn
 vine==5.1.0
     # via
     #   amqp
@@ -707,17 +905,32 @@ voluptuous==0.16.0
     #   dvc-studio-client
 waitress==3.0.2 ; sys_platform == 'win32'
     # via mlflow
+watchdog==7.1.1
+    # via
+    #   -r requirements.txt
+    #   evidently
+watchfiles==1.3.0
+    # via
+    #   -r requirements.txt
+    #   uvicorn
 wcwidth==0.9.5
     # via
     #   -r requirements.txt
     #   prettytable
     #   prompt-toolkit
+websockets==17.4
+    # via
+    #   -r requirements.txt
+    #   uvicorn
 werkzeug==3.1.9
     # via
     #   flask
     #   flask-cors
 wrapt==2.5.2
-    # via aiobotocore
+    # via
+    #   -r requirements.txt
+    #   aiobotocore
+    #   formulaic
 yarl==1.25.1
     # via aiohttp
 zc-lockfile==4.1
