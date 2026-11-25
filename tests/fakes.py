@@ -127,6 +127,12 @@ class FakeRegistry:
         run = self.tracker.runs[found.run_id]
         return VersionDetails(found, dict(self.version_tags[version]), dict(run.tags), dict(run.metrics))
 
+    def version_artifact(self, version: int, artifact_path: str) -> bytes:
+        artifacts = self.tracker.runs[self._get(version).run_id].artifacts
+        if artifact_path not in artifacts:
+            raise LookupError(f"version {version} has no artifact {artifact_path!r}")
+        return artifacts[artifact_path]
+
     def load_model(self, version: int) -> Classifier:
         model = self.tracker.runs[self._get(version).run_id].model
         assert model is not None

@@ -131,3 +131,24 @@ def test_registry_other_mlflow_errors_propagate(
 
     with pytest.raises(MlflowException, match="database unavailable"):
         call(registry)
+
+
+def test_version_artifact_server_error_propagates(
+    adapters: tuple[MlflowTracker, MlflowRegistry], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failing artifact store must surface, not be reported as a missing file."""
+    tracker, registry = adapters
+    sample = tmp_path / "reference_sample.csv"
+    sample.write_bytes(b"ID\n1\n")
+    with tracker.run("registry", "one") as run_id:
+        tracker.log_file(run_id, sample, "reference")
+        version = registry.register(tracker.log_model(run_id, DummyClassifier().fit(FEATURES, TARGET), FEATURES),
+                                    run_id).version
+
+    def fail(*args: object) -> None:
+        raise MlflowException("artifact store unavailable", INTERNAL_ERROR)
+
+    monkeypatch.setattr(registry._client, "download_artifacts", fail)
+
+    with pytest.raises(MlflowException, match="artifact store unavailable"):
+        registry.version_artifact(version, "reference/reference_sample.csv")

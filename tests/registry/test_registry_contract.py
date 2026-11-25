@@ -4,6 +4,7 @@ If the fake drifts away from MLflow's behaviour, the same test passes for one ba
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
@@ -111,3 +112,26 @@ def test_registry_version_details_unknown_LookupError(backend: tuple[ExperimentT
 
     with pytest.raises(LookupError):
         backend[1].version_details(99)
+
+
+def test_registry_version_artifact_read_back(backend: tuple[ExperimentTracker, ModelRegistry], tmp_path: Path) -> None:
+    tracker, registry = backend
+    sample = tmp_path / "reference_sample.csv"
+    sample.write_bytes(b"ID,Income\n1,50000\n")
+    with tracker.run("contract", "train") as run_id:
+        tracker.log_file(run_id, sample, "reference")
+        version = registry.register(tracker.log_model(run_id, DummyClassifier().fit(FEATURES, TARGET), FEATURES),
+                                    run_id).version
+
+    assert registry.version_artifact(version, "reference/reference_sample.csv") == b"ID,Income\n1,50000\n"
+
+
+@pytest.mark.parametrize(("version", "path"), [(1, "reference/missing.csv"), (99, "reference/reference_sample.csv")],
+                         ids=["unknown-file", "unknown-version"])
+def test_registry_version_artifact_unknown_LookupError(
+    backend: tuple[ExperimentTracker, ModelRegistry], version: int, path: str
+) -> None:
+    register_model(backend)
+
+    with pytest.raises(LookupError):
+        backend[1].version_artifact(version, path)

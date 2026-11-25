@@ -163,6 +163,16 @@ class MlflowRegistry:
             run_metrics=dict(run.data.metrics),
         )
 
+    def version_artifact(self, version: int, artifact_path: str) -> bytes:
+        run_id = self._version(version).run_id
+        # Listed first: through the server's artifact proxy a missing file is an HTTP 500, which the MLflow client
+        # retries with backoff for about 4.5 minutes before giving up (measured against the compose stack).
+        parent = artifact_path.rpartition("/")[0] or None
+        if artifact_path not in {item.path for item in self._client.list_artifacts(run_id, parent)}:
+            raise LookupError(f"version {version} has no artifact {artifact_path!r}")
+        with tempfile.TemporaryDirectory() as folder:
+            return Path(self._client.download_artifacts(run_id, artifact_path, folder)).read_bytes()
+
     def load_model(self, version: int) -> Classifier:
         """Load the skops file with our own trusted types, never the list stored in the model's MLmodel file.
 
