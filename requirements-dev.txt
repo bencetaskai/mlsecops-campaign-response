@@ -448,6 +448,10 @@ psutil==7.2.2
     # via
     #   dvc
     #   flufl-lock
+psycopg==3.3.9
+    # via -r requirements.txt
+psycopg-binary==3.3.9 ; implementation_name != 'pypy'
+    # via -r requirements.txt
 pyarrow==26.0.1
     # via mlflow
 pyasn1==0.6.5
@@ -596,6 +600,7 @@ sortedcontainers==2.4.0
     # via hypothesis
 sqlalchemy==2.1.9
     # via
+    #   -r requirements.txt
     #   alembic
     #   mlflow
 sqlparse==0.6.1
@@ -647,6 +652,7 @@ typing-extensions==4.16.0
     #   opentelemetry-api
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+    #   psycopg
     #   pydantic
     #   pydantic-core
     #   pydantic-settings
@@ -665,6 +671,7 @@ tzdata==2026.6 ; sys_platform == 'emscripten' or sys_platform == 'win32'
     #   -r requirements.txt
     #   kombu
     #   pandas
+    #   psycopg
     #   tzlocal
 tzlocal==5.4.5
     # via celery

@@ -15,10 +15,12 @@ dependencies = [
     "matplotlib>=3.9",
     "mlflow-skinny>=3.18,<3.19",   # client only; same minor version as the MLflow server image
     "pandas>=2.2",
+    "psycopg[binary]>=3.2",   # Postgres driver for the prediction log; SQLAlchemy 2.1's default dialect
     "pydantic-settings>=2.10",
     "pyyaml>=6.0",
     "scikit-learn>=1.6",
     "skops>=0.16",   # MLflow saves sklearn models as skops: loading cannot run arbitrary code, unlike pickle
+    "sqlalchemy>=2.1",   # prediction log, written with Core: every value is a bound parameter
 ]
 
 [tool.setuptools.dynamic]

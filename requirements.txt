@@ -103,6 +103,10 @@ protobuf==7.36.2
     #   databricks-sdk
     #   mlflow-skinny
     #   opentelemetry-proto
+psycopg==3.3.9
+    # via campaign-response (pyproject.toml)
+psycopg-binary==3.3.9 ; implementation_name != 'pypy'
+    # via psycopg
 pyasn1==0.6.5
     # via pyasn1-modules
 pyasn1-modules==0.4.2
@@ -153,6 +157,8 @@ skops==0.16.0
     # via campaign-response (pyproject.toml)
 smmap==5.0.3
     # via gitdb
+sqlalchemy==2.1.9
+    # via campaign-response (pyproject.toml)
 sqlparse==0.6.1
     # via mlflow-skinny
 starlette==1.10.0
@@ -169,9 +175,11 @@ typing-extensions==4.16.0
     #   opentelemetry-api
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+    #   psycopg
     #   pydantic
     #   pydantic-core
     #   pydantic-settings
+    #   sqlalchemy
     #   starlette
     #   typing-inspection
 typing-inspection==0.4.5
@@ -180,7 +188,9 @@ typing-inspection==0.4.5
     #   pydantic
     #   pydantic-settings
 tzdata==2026.6 ; sys_platform == 'emscripten' or sys_platform == 'win32'
-    # via pandas
+    # via
+    #   pandas
+    #   psycopg
 urllib3==2.8.0
     # via
     #   databricks-sdk
