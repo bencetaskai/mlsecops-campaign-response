@@ -124,6 +124,16 @@ def parse_enrollment_date(frame: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def clean_records(frame: pd.DataFrame, params: CleaningParams = CleaningParams()) -> pd.DataFrame:
+    """The rules that act on each row alone, in the same order as clean(), for scoring incoming records.
+
+    clean() also drops duplicate and conflicting rows, which needs the target and would cost an identical customer
+    in the same request its prediction; scoring must return one result per record.
+    """
+    births = mask_implausible_birth_year(frame, params)
+    return parse_enrollment_date(normalise_marital_status(mask_implausible_income(births, params)))
+
+
 @dataclass(frozen=True)
 class CleaningReport:
     rows_in: int

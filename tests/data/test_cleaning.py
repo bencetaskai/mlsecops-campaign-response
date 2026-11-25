@@ -14,6 +14,7 @@ from campaign_response.data.cleaning import (
     CleaningReport,
     birth_year_bounds,
     clean,
+    clean_records,
     drop_conflicting_labels,
     drop_constant_columns,
     drop_duplicate_customers,
@@ -461,3 +462,17 @@ def test_rule_idempotent(rule: Callable[[pd.DataFrame], pd.DataFrame], raw_frame
     once = rule(messy_frame(raw_frame))
 
     pd.testing.assert_frame_equal(rule(once), once)
+
+
+def test_clean_records_matches_clean_rows(raw_frame: pd.DataFrame) -> None:
+    cleaned, _ = clean(raw_frame)
+
+    per_record = clean_records(raw_frame)
+
+    pd.testing.assert_frame_equal(per_record.loc[cleaned.index, list(cleaned.columns)], cleaned)
+
+
+def test_clean_records_keeps_identical_rows(raw_frame: pd.DataFrame) -> None:
+    doubled = pd.concat([raw_frame, raw_frame], ignore_index=True)
+
+    assert len(clean_records(doubled)) == 2 * len(raw_frame)
