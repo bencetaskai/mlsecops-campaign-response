@@ -259,11 +259,17 @@ h11==0.16.0
     #   httpcore2
     #   uvicorn
 httpcore2==2.16.2 ; sys_platform != 'emscripten'
-    # via httpx2
+    # via
+    #   -r requirements.txt
+    #   httpx2
 httpx2==2.16.2
-    # via -r requirements-dev.in
+    # via
+    #   -r requirements.txt
+    #   -r requirements-dev.in
 httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
-    # via httpx2
+    # via
+    #   -r requirements.txt
+    #   httpx2
 huey==3.5.4
     # via mlflow
 hydra-core==1.3.8
@@ -632,6 +638,7 @@ tqdm==4.70.1
     #   scmrepo
 truststore==0.10.5 ; sys_platform != 'emscripten'
     # via
+    #   -r requirements.txt
     #   httpcore2
     #   httpx2
 types-pyyaml==6.0.12.20261113
