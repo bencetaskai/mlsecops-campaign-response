@@ -53,6 +53,12 @@ filterwarnings = [
     "ignore:The ``noload`` loader strategy is deprecated:sqlalchemy.exc.SADeprecationWarning",
     # Emitted while MLflow imports its own pyfunc modules (their Any type hints), whatever our code does.
     "ignore:.*Any type hint is inferred as AnyType:UserWarning:mlflow",
+    # Evidently 0.7.23 patches numpy.core while importing its own test helpers; numpy 2 deprecated that name.
+    "ignore:numpy.core is deprecated:DeprecationWarning",
+    # Evidently 0.7.23 has a regex with an invalid escape in a docstring example (descriptors/text_match.py).
+    "ignore:invalid escape sequence:SyntaxWarning",
+    # Evidently imports its UI service, built on litestar, whose 2.23 deprecates the dependency API it uses.
+    "ignore::litestar.exceptions.base_exceptions.LitestarDeprecationWarning",
 ]
 
 [tool.coverage.run]
