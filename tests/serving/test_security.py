@@ -3,12 +3,11 @@
 import logging
 
 import pytest
-from fakes import FakeRegistry, FakeTracker
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
-from serving_helpers import API_KEY
+from serving_helpers import API_KEY, make_dependencies
 
-from campaign_response.serving.app import ApiDependencies, MissingApiKeyError, create_app
+from campaign_response.serving.app import MissingApiKeyError, create_app
 from campaign_response.serving.security import API_KEY_HEADER, INVALID_API_KEY, api_key_checker
 
 WRONG_KEY = "w" * 40
@@ -66,7 +65,7 @@ def test_api_key_in_openapi_schema(client: TestClient) -> None:
 
 
 def test_create_app_without_key_refuses() -> None:
-    dependencies = ApiDependencies(FakeRegistry(FakeTracker()), "campaign-response-classifier", "abc123", None)
+    dependencies = make_dependencies(api_key=None)
 
     with pytest.raises(MissingApiKeyError, match="CRP_API_KEY"):
         create_app(dependencies)

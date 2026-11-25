@@ -29,6 +29,8 @@ _BIRTH_YEAR_LOW, _BIRTH_YEAR_HIGH = (int(bound) for bound in VALUE_RANGES["Year_
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 EducationLevel = Literal["Basic", "Graduation", "2n Cycle", "Master", "PhD"]
+# Who sent a prediction request; lets the dashboard tell simulated traffic from real use.
+PredictionSource = Literal["api", "swagger", "simulator", "airflow", "test"]
 Children = Annotated[int, Field(ge=0, le=MAX_CHILDREN)]
 Amount = Annotated[int, Field(ge=0, le=MAX_AMOUNT)]
 Count = Annotated[int, Field(ge=0, le=MAX_COUNT)]
@@ -91,6 +93,7 @@ class PredictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     records: list[CustomerRecord] = Field(min_length=1, max_length=MAX_RECORDS)
+    source: PredictionSource = "api"
 
 
 class Prediction(BaseModel):
@@ -98,7 +101,7 @@ class Prediction(BaseModel):
 
     ID: int | None
     probability: float = Field(ge=0, le=1)
-    label: Literal[0, 1]
+    label: int = Field(ge=0, le=1)
 
 
 class HealthStatus(BaseModel):

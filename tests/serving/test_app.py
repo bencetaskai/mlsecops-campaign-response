@@ -6,11 +6,11 @@ import pandas as pd
 import pytest
 from fakes import FakeRegistry, FakeTracker
 from fastapi.testclient import TestClient
-from serving_helpers import API_KEY
+from serving_helpers import make_dependencies
 
 from campaign_response import __version__
 from campaign_response.registry.ports import CHAMPION
-from campaign_response.serving.app import NO_CHAMPION, REGISTRY_UNREACHABLE, ApiDependencies, create_app
+from campaign_response.serving.app import NO_CHAMPION, REGISTRY_UNREACHABLE, create_app
 
 SECRET_URI = "http://user:secret@mlflow:5000"
 
@@ -22,7 +22,7 @@ def registry() -> FakeRegistry:
 
 @pytest.fixture
 def client(registry: FakeRegistry) -> TestClient:
-    return TestClient(create_app(ApiDependencies(registry, "campaign-response-classifier", "fbdb428", API_KEY)))
+    return TestClient(create_app(make_dependencies(registry, git_sha="fbdb428")))
 
 
 def add_champion(registry: FakeRegistry) -> None:

@@ -5,15 +5,29 @@ thread pool instead of stalling the event loop.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from fastapi import FastAPI, Response, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response, status
 from pydantic import SecretStr
 
 from campaign_response import __version__
-from campaign_response.registry.ports import CHAMPION, ModelRegistry, ModelVersion
+from campaign_response.data.cleaning import CleaningParams
+from campaign_response.registry.ports import CHAMPION, ExperimentTracker, ModelRegistry, ModelVersion
 from campaign_response.serving.middleware import request_context
-from campaign_response.serving.schemas import HealthStatus, VersionInfo
+from campaign_response.serving.model_cache import ChampionCache, ModelUnavailableError
+from campaign_response.serving.predict_service import PredictService
+from campaign_response.serving.prediction_logging import log_inference_run, prediction_records
+from campaign_response.serving.schemas import (
+    HealthStatus,
+    Prediction,
+    PredictRequest,
+    PredictResponse,
+    VersionInfo,
+)
+from campaign_response.serving.security import api_key_checker
+from campaign_response.storage.prediction_store import PredictionStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +42,14 @@ class MissingApiKeyError(RuntimeError):
 @dataclass(frozen=True)
 class ApiDependencies:
     registry: ModelRegistry
+    tracker: ExperimentTracker
+    cache: ChampionCache
+    store: PredictionStore
+    cleaning: CleaningParams
     model_name: str
     git_sha: str
     api_key: SecretStr | None
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC)
 
 
 def _champion(registry: ModelRegistry) -> tuple[ModelVersion | None, str | None]:
@@ -55,6 +74,8 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
         description="Trains campaign response models with a promotion gate and serves the champion.",
     )
     app.middleware("http")(request_context)
+    require_api_key = Depends(api_key_checker(dependencies.api_key))
+    predict_service = PredictService(dependencies.cache, dependencies.cleaning)
 
     @app.get("/health/live", tags=["health"])
     def live() -> HealthStatus:
@@ -79,6 +100,37 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
             git_sha=dependencies.git_sha,
             model_name=dependencies.model_name,
             champion_version=champion.version if champion is not None else None,
+        )
+
+    @app.post(
+        "/predict",
+        tags=["model"],
+        dependencies=[require_api_key],
+        responses={401: {"description": "Missing or invalid API key"}, 503: {"description": "No model to serve"}},
+    )
+    def predict(body: PredictRequest, request: Request, background: BackgroundTasks) -> PredictResponse:
+        """Score 1-1000 customers with the champion; every record and result goes to the prediction log."""
+        request_id: str = request.state.request_id
+        try:
+            scored = predict_service.predict(body.records)
+        except ModelUnavailableError as error:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        dependencies.store.save(prediction_records(request_id, dependencies.clock(), body, scored))
+        # About 0.4 s against the compose MLflow, so it runs after the response instead of delaying it.
+        background.add_task(log_inference_run, dependencies.tracker, request_id, body, scored)
+        logger.info("scored request", extra={
+            "n_records": len(body.records), "model_version": scored.model_version.version, "source": body.source,
+        })
+        return PredictResponse(
+            request_id=request_id,
+            model_name=scored.model_version.name,
+            model_version=scored.model_version.version,
+            model_alias=CHAMPION,
+            threshold=scored.threshold,
+            predictions=[
+                Prediction(ID=record.ID, probability=probability, label=label)
+                for record, probability, label in zip(body.records, scored.probabilities, scored.labels, strict=True)
+            ],
         )
 
     return app

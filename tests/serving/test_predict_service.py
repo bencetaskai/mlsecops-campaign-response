@@ -1,42 +1,22 @@
 """Tests for the predict service: training/serving parity of the model input, and scoring with a fitted model."""
 
-from datetime import datetime
-from typing import Any
-
 import numpy as np
 import pandas as pd
 import pytest
 from fakes import FakeRegistry, FakeTracker
+from serving_helpers import add_champion, payload_records
 from sklearn.model_selection import TunedThresholdClassifierCV
 
 from campaign_response.data.cleaning import CleaningParams, clean, clean_records
-from campaign_response.data.schema import DATE_COLUMN, DATE_FORMAT, FEATURE_COLUMNS, RAW_DTYPES
-from campaign_response.modeling.candidates import get_candidate
-from campaign_response.modeling.training import fit_with_tuned_threshold
+from campaign_response.data.schema import DATE_COLUMN, FEATURE_COLUMNS, RAW_DTYPES
 from campaign_response.pipeline.train_pipeline import split_features
-from campaign_response.registry.ports import CHAMPION
 from campaign_response.serving.model_cache import ChampionCache, NoChampionError
 from campaign_response.serving.predict_service import PredictService, records_to_raw_frame
 from campaign_response.serving.schemas import CustomerRecord
 
 
 def to_records(raw: pd.DataFrame) -> list[CustomerRecord]:
-    """Raw rows as the API receives them: ISO dates, null for missing income, plain Python numbers."""
-    records = []
-    for row in raw[list(FEATURE_COLUMNS)].to_dict("records"):
-        values: dict[str, Any] = {
-            column: None if pd.isna(value) else value.item() if isinstance(value, np.generic) else value
-            for column, value in row.items()
-        }
-        values[DATE_COLUMN] = datetime.strptime(values[DATE_COLUMN], DATE_FORMAT).date()
-        records.append(CustomerRecord.model_validate(values))
-    return records
-
-
-@pytest.fixture(scope="module")
-def model(customers: pd.DataFrame) -> TunedThresholdClassifierCV:
-    features, target = split_features(customers)
-    return fit_with_tuned_threshold(get_candidate("logistic_regression"), {}, features, target, cv_folds=3, seed=42)
+    return [CustomerRecord.model_validate(values) for values in payload_records(raw)]
 
 
 @pytest.fixture
@@ -46,9 +26,7 @@ def registry() -> FakeRegistry:
 
 @pytest.fixture
 def service(registry: FakeRegistry, model: TunedThresholdClassifierCV) -> PredictService:
-    with registry.tracker.run("training", "train") as run_id:
-        uri = registry.tracker.log_model(run_id, model, pd.DataFrame({"x": [1]}))
-    registry.set_alias(CHAMPION, registry.register(uri, run_id).version)
+    add_champion(registry, model)
     return PredictService(ChampionCache(registry), CleaningParams())
 
 
