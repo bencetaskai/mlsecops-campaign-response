@@ -196,7 +196,9 @@ urllib3==2.8.0
     #   databricks-sdk
     #   requests
 uvicorn==0.54.0
-    # via mlflow-skinny
+    # via
+    #   campaign-response (pyproject.toml)
+    #   mlflow-skinny
 wcwidth==0.9.5
     # via prettytable
 zipp==4.1.2

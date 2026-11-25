@@ -6,14 +6,16 @@
 FROM python:3.12.16-slim-trixie@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 
 # The app user has no home directory, so matplotlib's font cache goes to /tmp instead of a warning on every start.
-# MLflow would print a "View run" line with the run URL to stdout at the end of every run, outside the structured
-# logs; with one inference run per /predict request that floods the container log.
+# MLflow writes plain text beside the JSON logs: a "View run" URL at the end of every run (one per /predict request),
+# a progress bar for every artifact download (the champion model) and a hint for coding agents. All three are off.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONPATH=/app/src \
     MPLCONFIGDIR=/tmp/matplotlib \
-    MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT=true
+    MLFLOW_SUPPRESS_PRINTING_URL_TO_STDOUT=true \
+    MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR=false \
+    MLFLOW_DISABLE_AGENT_HINT=true
 
 WORKDIR /app
 

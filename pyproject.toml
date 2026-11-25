@@ -21,6 +21,7 @@ dependencies = [
     "scikit-learn>=1.6",
     "skops>=0.16",   # MLflow saves sklearn models as skops: loading cannot run arbitrary code, unlike pickle
     "sqlalchemy>=2.1",   # prediction log, written with Core: every value is a bound parameter
+    "uvicorn>=0.30",   # ASGI server for the API
 ]
 
 [tool.setuptools.dynamic]
