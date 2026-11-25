@@ -156,6 +156,12 @@ jobs:
           test "$databases" = 3
       - name: Build and start MLflow until its healthcheck passes
         run: docker compose up --build --detach --wait mlflow
+      - name: Build and start the API, then check it reaches MLflow and enforces the key
+        run: |
+          docker compose up --build --detach --wait api
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health/live)" = 200
+          curl -s http://localhost:8000/health/ready | grep -q 'no champion model yet'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict)" = 401
       - name: Logs on failure
         if: failure()
         run: docker compose logs

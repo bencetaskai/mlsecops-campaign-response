@@ -27,7 +27,9 @@ COPY requirements.txt .
 # but after a requirements change only new packages are downloaded.
 RUN --mount=type=cache,target=/root/.cache/pip pip install --requirement requirements.txt
 
-# Owned by root: the app user can read the code but not modify it.
+# Owned by root: the app user can read the code but not modify it. params.yaml travels with the code it was
+# tested with; the raw data does not (DVC versions it, compose mounts it read-only).
+COPY params.yaml .
 COPY src/ src/
 
 ARG GIT_SHA=unknown

@@ -1,6 +1,8 @@
 # First run: copy secrets_example/ to secrets/ and set your own values, then: docker compose up -d
 # Containers reach MinIO as http://minio:9000, the host (DVC CLI) as http://localhost:9000.
 # MLflow UI and API: http://localhost:5500 from the host, http://mlflow:5000 from containers.
+# REST API and Swagger UI: http://localhost:8000/docs. For the git_sha lineage tag, build with
+#   $env:GIT_SHA = git rev-parse --short HEAD; docker compose up --build -d
 # Postgres has no host port: services reach it as postgres:5432; for a shell: docker compose exec postgres psql -U postgres
 
 name: campaign-response
@@ -26,6 +28,8 @@ secrets:
     file: ./secrets/airflow_db_password.txt
   monitoring_db_password:
     file: ./secrets/monitoring_db_password.txt
+  api_key:
+    file: ./secrets/api_key.txt
 
 services:
   postgres:
@@ -102,6 +106,55 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: campaign-response-app:local
+    command: ["python", "-m", "campaign_response.serving.main"]
+    environment:
+      CRP_API_HOST: 0.0.0.0
+      CRP_LOG_FORMAT: json
+      CRP_MLFLOW_TRACKING_URI: http://mlflow:5000
+      CRP_PREDICTION_DB_HOST: postgres
+    # Mounted under the names the settings read from /run/secrets (CRP_ prefix, lower case).
+    secrets:
+      - source: api_key
+        target: crp_api_key
+      - source: monitoring_db_password
+        target: crp_prediction_db_password
+    volumes:
+      # Training data from the host, versioned by DVC (`dvc pull`); the API never writes it.
+      - ./data/raw:/app/data/raw:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    # Hardening: the code and image are read-only, only /tmp (model downloads, artifact files) is writable,
+    # and the process can gain no privileges or capabilities.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      # Liveness only: before the first training there is no champion, and the API must still count as up so the
+      # bootstrap job can call POST /train. Readiness is /health/ready.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     restart: unless-stopped
     logging: *logging
 
