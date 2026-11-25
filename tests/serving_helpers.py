@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -11,25 +12,47 @@ from pydantic import SecretStr
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.schema import DATE_COLUMN, DATE_FORMAT, FEATURE_COLUMNS
+from campaign_response.data.splitting import SplitParams
+from campaign_response.params import PipelineParams
+from campaign_response.pipeline.train_pipeline import TrainingContext
 from campaign_response.registry.ports import CHAMPION
+from campaign_response.registry.promotion import GateParams
 from campaign_response.serving.app import ApiDependencies
 from campaign_response.serving.model_cache import ChampionCache
 from campaign_response.serving.security import API_KEY_HEADER
+from campaign_response.serving.training_service import TrainingService
 
 # Repeated characters: obviously fake and low in entropy, so gitleaks has nothing to flag and needs no exception.
 API_KEY = SecretStr("k" * 40)
 AUTH = {API_KEY_HEADER: API_KEY.get_secret_value()}
 NOW = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)
 MODEL_NAME = "campaign-response-classifier"
+REQUIREMENTS = Path(__file__).resolve().parents[1] / "requirements.txt"
 
 
-def make_dependencies(registry: FakeRegistry | None = None, **changes: object) -> ApiDependencies:
-    """Fakes for every port, the registry's own tracker, a fixed clock; keyword arguments replace single fields."""
+def make_dependencies(
+    registry: FakeRegistry | None = None, raw_data_path: Path = Path("missing/marketing_campaign.csv"),
+    **changes: object,
+) -> ApiDependencies:
+    """Fakes for every port, the registry's own tracker, a fixed clock; keyword arguments replace single fields.
+
+    Training reads raw_data_path, by default a file that does not exist.
+    """
     registry = registry if registry is not None else FakeRegistry(FakeTracker())
+    cache = ChampionCache(registry)
+    context = TrainingContext(
+        tracker=registry.tracker,
+        registry=registry,
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams()),
+        raw_data_path=raw_data_path,
+        requirements_path=REQUIREMENTS,
+        environ={"GIT_SHA": "abc123"},
+    )
     dependencies = ApiDependencies(
         registry=registry,
         tracker=registry.tracker,
-        cache=ChampionCache(registry),
+        cache=cache,
+        training=TrainingService(context, cache),
         store=FakePredictionStore(),
         cleaning=CleaningParams(),
         model_name=MODEL_NAME,

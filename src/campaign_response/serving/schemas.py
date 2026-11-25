@@ -9,12 +9,19 @@ import re
 from datetime import date
 from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.schema import VALUE_RANGES
+from campaign_response.pipeline.train_pipeline import TrainingRequest
 
 MAX_RECORDS: Final = 1000
+# n_iter above 10 and 10 folds gave no better model on unseen data (nested check, 02 §4.2), only up to 10 min
+# per request; larger searches stay possible through the CLI.
+MAX_N_ITER: Final = 10
+MIN_CV_FOLDS: Final = 3
+MAX_CV_FOLDS: Final = 10
+MAX_SEED: Final = 2**32 - 1
 MAX_CHILDREN: Final = 10
 MAX_RECENCY_DAYS: Final = 3650
 MAX_AMOUNT: Final = 100_000
@@ -129,3 +136,60 @@ class PredictResponse(BaseModel):
     model_alias: str
     threshold: float = Field(ge=0, le=1)
     predictions: list[Prediction]
+
+
+# The baseline is always trained for comparison, so it cannot be requested.
+TrainableCandidate = Literal["logistic_regression", "random_forest", "hist_gradient_boosting"]
+# Who started a training run through the API; stored as the run's trained_by lineage tag.
+TrainingTrigger = Literal["api", "airflow", "bootstrap"]
+_TRAINING_DEFAULTS: Final = TrainingRequest()
+# Typed copy of the CLI default (TrainingRequest has plain strings); a test keeps the two equal.
+DEFAULT_CANDIDATES: Final[tuple[TrainableCandidate, ...]] = (
+    "logistic_regression", "random_forest", "hist_gradient_boosting",
+)
+
+
+def _unique(candidates: list[TrainableCandidate]) -> list[TrainableCandidate]:
+    if len(set(candidates)) != len(candidates):
+        raise ValueError("candidates must not repeat")
+    return candidates
+
+
+class TrainRequest(BaseModel):
+    """Every field optional; the defaults are the CLI's, which the nested check found as good as larger searches."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    candidates: Annotated[list[TrainableCandidate], Field(min_length=1, max_length=3), AfterValidator(_unique)] = (
+        Field(default_factory=lambda: list(DEFAULT_CANDIDATES))
+    )
+    n_iter: int = Field(default=_TRAINING_DEFAULTS.n_iter, ge=1, le=MAX_N_ITER)
+    cv_folds: int = Field(default=_TRAINING_DEFAULTS.cv_folds, ge=MIN_CV_FOLDS, le=MAX_CV_FOLDS)
+    seed: int = Field(default=_TRAINING_DEFAULTS.seed, ge=0, le=MAX_SEED)
+    trained_by: TrainingTrigger = "api"
+
+
+class HoldoutMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pr_auc: float
+    roc_auc: float
+    f1: float
+    precision: float
+    recall: float
+
+
+class TrainResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    run_id: str
+    model_name: str
+    model_version: int = Field(ge=1)
+    best_candidate: str
+    threshold: float = Field(ge=0, le=1)
+    holdout_metrics: HoldoutMetrics
+    champion_before: int | None
+    champion_after: int | None
+    promoted: bool
+    gate_reason: str
+    duration_s: float

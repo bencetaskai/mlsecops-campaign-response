@@ -8,8 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from campaign_response.data import schema
+from campaign_response.modeling.candidates import BASELINE, CANDIDATE_NAMES
 from campaign_response.params import load_params
+from campaign_response.pipeline.train_pipeline import TrainingRequest
 from campaign_response.serving.schemas import (
+    DEFAULT_CANDIDATES,
     LATEST_ENROLLMENT,
     MAX_RECORDS,
     CustomerRecord,
@@ -17,6 +20,8 @@ from campaign_response.serving.schemas import (
     Prediction,
     PredictRequest,
     PredictResponse,
+    TrainableCandidate,
+    TrainRequest,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -188,3 +193,43 @@ def test_predict_response_round_trip() -> None:
 def test_prediction_invalid_value_rejected(changes: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         Prediction.model_validate({"ID": None, "probability": 0.5, "label": 0, **changes})
+
+
+def test_train_request_defaults_match_cli() -> None:
+    request, cli = TrainRequest(), TrainingRequest()
+
+    assert (tuple(request.candidates), request.n_iter, request.cv_folds, request.seed) == (
+        cli.candidates, cli.n_iter, cli.cv_folds, cli.seed,
+    )
+    assert DEFAULT_CANDIDATES == cli.candidates
+
+
+def test_trainable_candidates_exclude_baseline() -> None:
+    assert set(get_args(TrainableCandidate)) == set(CANDIDATE_NAMES) - {BASELINE}
+
+
+@pytest.mark.parametrize("changes", [
+    {"candidates": []},
+    {"candidates": ["dummy"]},
+    {"candidates": ["svm"]},
+    {"candidates": ["random_forest", "random_forest"]},
+    {"n_iter": 0},
+    {"n_iter": 11},
+    {"n_iter": "5"},
+    {"cv_folds": 2},
+    {"cv_folds": 11},
+    {"seed": -1},
+    {"seed": 2**32},
+    {"trained_by": "cli"},
+    {"promote": False},
+], ids=lambda changes: f"{next(iter(changes))}={next(iter(changes.values()))!r}"[:40])
+def test_train_request_invalid_rejected(changes: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        TrainRequest.model_validate(changes)
+
+
+def test_train_request_limits_accepted() -> None:
+    request = TrainRequest.model_validate({"candidates": ["hist_gradient_boosting"], "n_iter": 10, "cv_folds": 3,
+                                           "seed": 0, "trained_by": "airflow"})
+
+    assert request.candidates == ["hist_gradient_boosting"]

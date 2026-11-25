@@ -5,15 +5,18 @@ thread pool instead of stalling the event loop.
 """
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response, params, status
 from pydantic import SecretStr
 
 from campaign_response import __version__
 from campaign_response.data.cleaning import CleaningParams
+from campaign_response.data.io import RawDataError
+from campaign_response.pipeline.train_pipeline import DataValidationError, TrainingOutcome, TrainingRequest
 from campaign_response.registry.ports import CHAMPION, ExperimentTracker, ModelRegistry, ModelVersion
 from campaign_response.serving.middleware import request_context
 from campaign_response.serving.model_cache import ChampionCache, ModelUnavailableError
@@ -21,17 +24,23 @@ from campaign_response.serving.predict_service import PredictService
 from campaign_response.serving.prediction_logging import log_inference_run, prediction_records, save_predictions
 from campaign_response.serving.schemas import (
     HealthStatus,
+    HoldoutMetrics,
     Prediction,
     PredictRequest,
     PredictResponse,
+    TrainRequest,
+    TrainResponse,
     VersionInfo,
 )
 from campaign_response.serving.security import api_key_checker
+from campaign_response.serving.training_service import TrainingInProgressError, TrainingService
 from campaign_response.storage.prediction_store import PredictionStore
 
 logger = logging.getLogger(__name__)
 
 NO_CHAMPION = "no champion model yet; call POST /train"
+TRAINING_DATA_MISSING = "training data not found on the server; fetch it with `dvc pull`"
+TRAINING_DATA_INVALID = "training data failed validation; see validation_report.json in the training run"
 REGISTRY_UNREACHABLE = "model registry unreachable"
 
 
@@ -44,6 +53,7 @@ class ApiDependencies:
     registry: ModelRegistry
     tracker: ExperimentTracker
     cache: ChampionCache
+    training: TrainingService
     store: PredictionStore
     cleaning: CleaningParams
     model_name: str
@@ -75,8 +85,13 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
     )
     app.middleware("http")(request_context)
     require_api_key = Depends(api_key_checker(dependencies.api_key))
-    predict_service = PredictService(dependencies.cache, dependencies.cleaning)
+    _add_health_routes(app, dependencies)
+    _add_predict_route(app, dependencies, require_api_key)
+    _add_train_route(app, dependencies, require_api_key)
+    return app
 
+
+def _add_health_routes(app: FastAPI, dependencies: ApiDependencies) -> None:
     @app.get("/health/live", tags=["health"])
     def live() -> HealthStatus:
         """The process is up; says nothing about the model."""
@@ -101,6 +116,10 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
             model_name=dependencies.model_name,
             champion_version=champion.version if champion is not None else None,
         )
+
+
+def _add_predict_route(app: FastAPI, dependencies: ApiDependencies, require_api_key: params.Depends) -> None:
+    predict_service = PredictService(dependencies.cache, dependencies.cleaning)
 
     @app.post(
         "/predict",
@@ -133,4 +152,57 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
             ],
         )
 
-    return app
+
+def _add_train_route(app: FastAPI, dependencies: ApiDependencies, require_api_key: params.Depends) -> None:
+    @app.post(
+        "/train",
+        tags=["model"],
+        dependencies=[require_api_key],
+        responses={
+            401: {"description": "Missing or invalid API key"},
+            409: {"description": "Another training run is in progress"},
+            503: {"description": "Training data missing or invalid"},
+        },
+    )
+    def train(body: TrainRequest) -> TrainResponse:
+        """Train the candidates, register the best as challenger and promote it only if the gate passes.
+
+        Takes about 2 minutes with the defaults. A rejected challenger is a normal outcome (200, promoted false).
+        """
+        started = time.perf_counter()
+        request = TrainingRequest(
+            candidates=tuple(body.candidates), n_iter=body.n_iter, cv_folds=body.cv_folds, seed=body.seed,
+            trained_by=body.trained_by,
+        )
+        unavailable = status.HTTP_503_SERVICE_UNAVAILABLE
+        try:
+            outcome = dependencies.training.train(request)
+        except TrainingInProgressError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        # Server-side data problems, not request errors; the message names no path or file content.
+        except FileNotFoundError as error:
+            raise HTTPException(status_code=unavailable, detail=TRAINING_DATA_MISSING) from error
+        except (DataValidationError, RawDataError) as error:
+            raise HTTPException(status_code=unavailable, detail=TRAINING_DATA_INVALID) from error
+        return _train_response(outcome, time.perf_counter() - started)
+
+
+def _train_response(outcome: TrainingOutcome, seconds: float) -> TrainResponse:
+    before = outcome.champion.version if outcome.champion is not None else None
+    holdout = outcome.holdout
+    return TrainResponse(
+        run_id=outcome.run_id,
+        model_name=outcome.version.name,
+        model_version=outcome.version.version,
+        best_candidate=outcome.best_candidate,
+        threshold=outcome.threshold,
+        holdout_metrics=HoldoutMetrics(
+            pr_auc=holdout.pr_auc, roc_auc=holdout.roc_auc, f1=holdout.f1, precision=holdout.precision,
+            recall=holdout.recall,
+        ),
+        champion_before=before,
+        champion_after=outcome.version.version if outcome.promoted else before,
+        promoted=outcome.promoted,
+        gate_reason=outcome.decision.reason,
+        duration_s=round(seconds, 1),
+    )
