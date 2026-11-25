@@ -42,3 +42,14 @@ class Settings(BaseSettings):
     model_name: str = Field(default="campaign-response-classifier", pattern=r"^[A-Za-z0-9_.-]+$")
     # Optional here, as the CLI needs no key; the API refuses to start without one.
     api_key: Annotated[SecretStr, Field(min_length=MIN_API_KEY_LENGTH)] | None = None
+    params_path: Path = Path("params.yaml")
+    api_host: str = "127.0.0.1"
+    api_port: int = Field(default=8000, ge=1, le=65535)
+    model_cache_ttl_seconds: float = Field(default=30.0, gt=0)
+    # No host: the prediction log goes to a SQLite file in data_dir, so the API also runs without compose.
+    prediction_db_host: str | None = None
+    prediction_db_port: int = Field(default=5432, ge=1, le=65535)
+    prediction_db_name: str = "monitoring"
+    prediction_db_user: str = "monitoring"
+    # From the Docker secret file crp_prediction_db_password, never part of a URL in the environment.
+    prediction_db_password: SecretStr | None = None
