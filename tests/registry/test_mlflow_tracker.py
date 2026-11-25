@@ -1,6 +1,7 @@
 """The MLflow tracker adapter against a real local MLflow (store from tests/registry/conftest.py)."""
 
 import json
+from contextlib import ExitStack
 from pathlib import Path
 
 import mlflow
@@ -13,6 +14,8 @@ import pytest
 import skops.io
 from matplotlib.figure import Figure
 from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
+from mlflow.protos.databricks_pb2 import INTERNAL_ERROR, RESOURCE_ALREADY_EXISTS
 
 from campaign_response.modeling.candidates import CANDIDATE_NAMES, get_candidate
 from campaign_response.modeling.training import fit_with_tuned_threshold
@@ -120,3 +123,33 @@ def test_skops_trusted_types_cover_candidate(name: str, data: tuple[pd.DataFrame
     untrusted = skops.io.get_untrusted_types(data=skops.io.dumps(model))
 
     assert set(untrusted) <= set(SKOPS_TRUSTED_TYPES)
+
+
+def test_tracker_experiment_race_lost_uses_existing(
+    tracker: MlflowTracker, client: MlflowClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another request created the experiment between this one's lookup and its create call."""
+    existing = client.create_experiment("race")
+    lookups = iter([None, client.get_experiment(existing)])
+    monkeypatch.setattr(tracker._client, "get_experiment_by_name", lambda name: next(lookups))
+
+    with tracker.run("race", "late") as run_id:
+        pass
+
+    assert client.get_run(run_id).info.experiment_id == existing
+
+
+@pytest.mark.parametrize(("error_code", "error"), [
+    (RESOURCE_ALREADY_EXISTS, LookupError), (INTERNAL_ERROR, MlflowException),
+], ids=["vanished", "server-error"])
+def test_tracker_experiment_create_failure_raises(
+    tracker: MlflowTracker, monkeypatch: pytest.MonkeyPatch, error_code: int, error: type[Exception]
+) -> None:
+    def refuse(name: str) -> str:
+        raise MlflowException("cannot create experiment", error_code)
+
+    monkeypatch.setattr(tracker._client, "get_experiment_by_name", lambda name: None)
+    monkeypatch.setattr(tracker._client, "create_experiment", refuse)
+
+    with pytest.raises(error), ExitStack() as stack:
+        stack.enter_context(tracker.run("nowhere", "never"))

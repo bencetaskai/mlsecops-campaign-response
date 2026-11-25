@@ -100,7 +100,18 @@ class MlflowTracker:
 
     def _experiment_id(self, name: str) -> str:
         experiment = self._client.get_experiment_by_name(name)
-        return experiment.experiment_id if experiment is not None else self._client.create_experiment(name)
+        if experiment is not None:
+            return experiment.experiment_id
+        try:
+            return self._client.create_experiment(name)
+        except MlflowException as error:
+            # Lost a race: parallel /predict background tasks both found no experiment and both tried to create it.
+            if error.error_code != "RESOURCE_ALREADY_EXISTS":
+                raise
+        created = self._client.get_experiment_by_name(name)
+        if created is None:
+            raise LookupError(f"experiment {name!r} reported as existing but not found") from None
+        return created.experiment_id
 
 
 class MlflowRegistry:
