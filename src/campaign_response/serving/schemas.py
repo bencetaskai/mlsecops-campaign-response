@@ -193,3 +193,25 @@ class TrainResponse(BaseModel):
     promoted: bool
     gate_reason: str
     duration_s: float
+
+
+class AliasedVersion(BaseModel):
+    """A version an alias points at; metrics and gate verdict are null for a version made outside the pipeline."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    alias: str
+    version: int = Field(ge=1)
+    run_id: str
+    best_candidate: str | None
+    threshold: float | None
+    holdout_metrics: HoldoutMetrics | None
+    promoted: bool | None
+    gate_reason: str | None
+
+
+class ModelOverview(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_name: str
+    versions: list[AliasedVersion]

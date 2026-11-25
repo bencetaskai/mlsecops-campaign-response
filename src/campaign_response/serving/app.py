@@ -17,14 +17,24 @@ from campaign_response import __version__
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.io import RawDataError
 from campaign_response.pipeline.train_pipeline import DataValidationError, TrainingOutcome, TrainingRequest
-from campaign_response.registry.ports import CHAMPION, ExperimentTracker, ModelRegistry, ModelVersion
+from campaign_response.registry.ports import (
+    CHALLENGER,
+    CHAMPION,
+    PREVIOUS,
+    ExperimentTracker,
+    ModelRegistry,
+    ModelVersion,
+    VersionDetails,
+)
 from campaign_response.serving.middleware import request_context
 from campaign_response.serving.model_cache import ChampionCache, ModelUnavailableError
 from campaign_response.serving.predict_service import PredictService
 from campaign_response.serving.prediction_logging import log_inference_run, prediction_records, save_predictions
 from campaign_response.serving.schemas import (
+    AliasedVersion,
     HealthStatus,
     HoldoutMetrics,
+    ModelOverview,
     Prediction,
     PredictRequest,
     PredictResponse,
@@ -42,6 +52,8 @@ NO_CHAMPION = "no champion model yet; call POST /train"
 TRAINING_DATA_MISSING = "training data not found on the server; fetch it with `dvc pull`"
 TRAINING_DATA_INVALID = "training data failed validation; see validation_report.json in the training run"
 REGISTRY_UNREACHABLE = "model registry unreachable"
+# Prefix of the holdout metrics in a training run (holdout_pr_auc, ...).
+HOLDOUT_PREFIX = "holdout_"
 
 
 class MissingApiKeyError(RuntimeError):
@@ -86,6 +98,7 @@ def create_app(dependencies: ApiDependencies) -> FastAPI:
     app.middleware("http")(request_context)
     require_api_key = Depends(api_key_checker(dependencies.api_key))
     _add_health_routes(app, dependencies)
+    _add_model_route(app, dependencies)
     _add_predict_route(app, dependencies, require_api_key)
     _add_train_route(app, dependencies, require_api_key)
     return app
@@ -116,6 +129,41 @@ def _add_health_routes(app: FastAPI, dependencies: ApiDependencies) -> None:
             model_name=dependencies.model_name,
             champion_version=champion.version if champion is not None else None,
         )
+
+
+def _add_model_route(app: FastAPI, dependencies: ApiDependencies) -> None:
+    @app.get("/model", tags=["model"], responses={503: {"description": "Model registry unreachable"}})
+    def model() -> ModelOverview:
+        """The champion, challenger and previous versions with their holdout metrics and gate verdict."""
+        try:
+            versions = [
+                _aliased_version(alias, dependencies.registry.version_details(current.version))
+                for alias in (CHAMPION, CHALLENGER, PREVIOUS)
+                if (current := dependencies.registry.get_by_alias(alias)) is not None
+            ]
+        # Broad on purpose, as in the health check; only the type is logged.
+        except Exception as error:
+            logger.warning(REGISTRY_UNREACHABLE, extra={"error_type": type(error).__name__})
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=REGISTRY_UNREACHABLE) from error
+        return ModelOverview(model_name=dependencies.model_name, versions=versions)
+
+
+def _aliased_version(alias: str, details: VersionDetails) -> AliasedVersion:
+    metrics = {key.removeprefix(HOLDOUT_PREFIX): value for key, value in details.run_metrics.items()
+               if key.startswith(HOLDOUT_PREFIX)}
+    fields = HoldoutMetrics.model_fields
+    holdout = HoldoutMetrics(**{name: metrics[name] for name in fields}) if set(fields) <= set(metrics) else None
+    promoted = details.version_tags.get("promoted")
+    return AliasedVersion(
+        alias=alias,
+        version=details.version.version,
+        run_id=details.version.run_id,
+        best_candidate=details.run_tags.get("best_candidate"),
+        threshold=metrics.get("threshold"),
+        holdout_metrics=holdout,
+        promoted=None if promoted is None else promoted == "true",
+        gate_reason=details.version_tags.get("gate_reason"),
+    )
 
 
 def _add_predict_route(app: FastAPI, dependencies: ApiDependencies, require_api_key: params.Depends) -> None:
