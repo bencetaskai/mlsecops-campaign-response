@@ -158,6 +158,27 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  model-bootstrap:
+    image: campaign-response-app:local
+    command: ["python", "-m", "campaign_response.bootstrap"]
+    environment:
+      CRP_API_URL: http://api:8000
+      CRP_LOG_FORMAT: json
+    secrets:
+      - source: api_key
+        target: crp_api_key
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      api:
+        condition: service_healthy
+    # One-shot: trains the first champion if the registry has none, then exits (0 = a champion exists).
+    restart: "no"
+    logging: *logging
+
   minio-init:
     image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
     entrypoint: ["/bin/sh", "/scripts/create-buckets.sh"]

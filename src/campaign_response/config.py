@@ -53,3 +53,5 @@ class Settings(BaseSettings):
     prediction_db_user: str = "monitoring"
     # From the Docker secret file crp_prediction_db_password, never part of a URL in the environment.
     prediction_db_password: SecretStr | None = None
+    # Where the bootstrap job and the smoke script reach the API.
+    api_url: str = Field(default="http://localhost:8000", pattern=r"^https?://\S+$")
