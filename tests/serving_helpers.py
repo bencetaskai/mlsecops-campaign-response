@@ -13,6 +13,7 @@ from pydantic import SecretStr
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.schema import DATE_COLUMN, DATE_FORMAT, FEATURE_COLUMNS
 from campaign_response.data.splitting import SplitParams
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline.train_pipeline import TrainingContext
 from campaign_response.registry.ports import CHAMPION
@@ -43,7 +44,7 @@ def make_dependencies(
     context = TrainingContext(
         tracker=registry.tracker,
         registry=registry,
-        params=PipelineParams(CleaningParams(), SplitParams(), GateParams()),
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(), MonitoringParams()),
         raw_data_path=raw_data_path,
         requirements_path=REQUIREMENTS,
         environ={"GIT_SHA": "abc123"},

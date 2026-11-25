@@ -26,3 +26,10 @@ gate:
   bootstrap_quantile: 0.10     #     is at or below -0.02
   max_pr_auc_loss: 0.02
   seed: 42
+
+# Drift monitoring and the retraining rule. Calibrated on 1,440 Evidently reports (docs: architecture 02 section 6):
+# with these values 0/60 undrifted windows of 200 or 400 rows raised an alarm and 60/60 five-column shifts did.
+monitoring:
+  drift_threshold: 0.2         # per-column distance (Wasserstein / Jensen-Shannon) at or above which a column drifts
+  min_rows: 200                # fewer predictions in the window: never recommend retraining
+  min_drifted_columns: 3       # of 25 features; a single shifted column must not trip the alarm

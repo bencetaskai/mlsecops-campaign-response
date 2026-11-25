@@ -9,7 +9,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from campaign_response.data.cleaning import CleaningParams
+from campaign_response.data.schema import FEATURE_COLUMNS
 from campaign_response.data.splitting import SplitParams
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.registry.promotion import GateParams
 
 
@@ -56,12 +58,21 @@ class _GateSection(BaseModel):
         return self
 
 
+class _MonitoringSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    drift_threshold: float = Field(gt=0)
+    min_rows: int = Field(ge=1)
+    min_drifted_columns: int = Field(ge=1, le=len(FEATURE_COLUMNS))
+
+
 class _ParamsFile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cleaning: _CleaningSection
     split: _SplitSection
     gate: _GateSection
+    monitoring: _MonitoringSection
 
 
 @dataclass(frozen=True)
@@ -69,6 +80,7 @@ class PipelineParams:
     cleaning: CleaningParams
     split: SplitParams
     gate: GateParams
+    monitoring: MonitoringParams
 
 
 def load_params(path: Path) -> PipelineParams:
@@ -79,4 +91,5 @@ def load_params(path: Path) -> PipelineParams:
         cleaning=CleaningParams(**content.cleaning.model_dump()),
         split=SplitParams(**content.split.model_dump()),
         gate=GateParams(**content.gate.model_dump()),
+        monitoring=MonitoringParams(**content.monitoring.model_dump()),
     )

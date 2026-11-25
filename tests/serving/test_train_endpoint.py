@@ -11,6 +11,7 @@ from serving_helpers import AUTH, REQUIREMENTS, make_dependencies, payload_recor
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.splitting import SplitParams
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline.train_pipeline import TrainingContext
 from campaign_response.registry.ports import CHAMPION
@@ -37,7 +38,7 @@ def strict_client(registry: FakeRegistry, raw_file: Path) -> TestClient:
     cache = ChampionCache(registry)
     context = TrainingContext(
         tracker=registry.tracker, registry=registry,
-        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(min_pr_auc=1.0)),
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(min_pr_auc=1.0), MonitoringParams()),
         raw_data_path=raw_file, requirements_path=REQUIREMENTS, environ={"GIT_SHA": "abc123"},
     )
     return TestClient(create_app(make_dependencies(registry, cache=cache, training=TrainingService(context, cache))))

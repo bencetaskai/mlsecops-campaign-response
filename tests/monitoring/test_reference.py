@@ -9,6 +9,7 @@ from fakes import FakeRegistry, FakeTracker
 from campaign_response.data.cleaning import CleaningParams, clean
 from campaign_response.data.splitting import SplitParams, split_train_holdout
 from campaign_response.monitoring.reference import ReferenceUnavailableError, load_reference
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline.train_pipeline import TrainingContext, TrainingRequest, run_training
 from campaign_response.registry.ports import CHAMPION
@@ -26,7 +27,7 @@ def registry() -> FakeRegistry:
 def train(registry: FakeRegistry, raw_file: Path) -> int:
     context = TrainingContext(
         tracker=registry.tracker, registry=registry,
-        params=PipelineParams(CleaningParams(), SplitParams(), GateParams()),
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(), MonitoringParams()),
         raw_data_path=raw_file, requirements_path=REQUIREMENTS, environ={"GIT_SHA": "abc123"},
     )
     return run_training(REQUEST, context).version.version

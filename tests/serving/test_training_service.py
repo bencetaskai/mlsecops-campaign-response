@@ -8,6 +8,7 @@ from fakes import FakeRegistry, FakeTracker
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.splitting import SplitParams
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline import train_pipeline
 from campaign_response.pipeline.train_pipeline import TrainingContext, TrainingOutcome, TrainingRequest
@@ -35,7 +36,7 @@ def service(registry: FakeRegistry, cache: ChampionCache, raw_customers_file: Pa
     context = TrainingContext(
         tracker=registry.tracker,
         registry=registry,
-        params=PipelineParams(CleaningParams(), SplitParams(), GateParams()),
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(), MonitoringParams()),
         raw_data_path=raw_customers_file,
         requirements_path=REQUIREMENTS,
         environ={"GIT_SHA": "abc123"},

@@ -10,6 +10,7 @@ from fakes import FAILED, FINISHED, FakeRegistry, FakeTracker
 from campaign_response.data.cleaning import CleaningParams, clean
 from campaign_response.data.io import load_processed
 from campaign_response.data.splitting import SplitParams, split_train_holdout
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import PipelineParams
 from campaign_response.pipeline.train_pipeline import (
     EXPERIMENT,
@@ -32,7 +33,7 @@ def make_context(raw_file: Path) -> TrainingContext:
     return TrainingContext(
         tracker=tracker,
         registry=FakeRegistry(tracker),
-        params=PipelineParams(CleaningParams(), SplitParams(), GateParams()),
+        params=PipelineParams(CleaningParams(), SplitParams(), GateParams(), MonitoringParams()),
         raw_data_path=raw_file,
         requirements_path=REQUIREMENTS,
         environ={"GIT_SHA": "abc123"},

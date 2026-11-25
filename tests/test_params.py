@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from campaign_response.data.cleaning import CleaningParams
 from campaign_response.data.splitting import SplitParams
+from campaign_response.monitoring.retraining import MonitoringParams
 from campaign_response.params import load_params
 from campaign_response.registry.promotion import GateParams
 
@@ -33,6 +34,10 @@ gate:
   bootstrap_quantile: 0.05
   max_pr_auc_loss: 0.01
   seed: 3
+monitoring:
+  drift_threshold: 0.15
+  min_rows: 300
+  min_drifted_columns: 4
 """
 
 
@@ -48,6 +53,7 @@ def test_repo_params_match_code_defaults() -> None:
     assert params.cleaning == CleaningParams()
     assert params.split == SplitParams()
     assert params.gate == GateParams()
+    assert params.monitoring == MonitoringParams()
 
 
 def test_params_values_loaded(tmp_path: Path) -> None:
@@ -56,6 +62,7 @@ def test_params_values_loaded(tmp_path: Path) -> None:
     assert params.cleaning == CleaningParams(date(2015, 6, 30), 21, 90, 150000)
     assert params.split == SplitParams(holdout_size=0.2, seed=7)
     assert params.gate == GateParams(0.25, 0.05, 0.03, 0.2, 0.01, 0.5, 500, 0.05, 0.01, 3)
+    assert params.monitoring == MonitoringParams(drift_threshold=0.15, min_rows=300, min_drifted_columns=4)
 
 
 def test_params_quoted_date_accepted(tmp_path: Path) -> None:
@@ -75,6 +82,9 @@ def test_params_quoted_date_accepted(tmp_path: Path) -> None:
         ("min_prediction_rate: 0.01", "min_prediction_rate: 0.7", "must be below max_prediction_rate"),
         ("bootstrap_resamples: 500", "bootstrap_resamples: 10", "greater than or equal to 100"),
         ("bootstrap_quantile: 0.05", "bootstrap_quantile: 0.5", "less than 0.5"),
+        ("drift_threshold: 0.15", "drift_threshold: 0", "greater than 0"),
+        ("min_rows: 300", "min_rows: 0", "greater than or equal to 1"),
+        ("min_drifted_columns: 4", "min_drifted_columns: 26", "less than or equal to 25"),
     ],
 )
 def test_params_invalid_ValidationError(tmp_path: Path, old: str, new: str, message: str) -> None:
@@ -83,8 +93,8 @@ def test_params_invalid_ValidationError(tmp_path: Path, old: str, new: str, mess
 
 
 def test_params_missing_section_ValidationError(tmp_path: Path) -> None:
-    with pytest.raises(ValidationError, match="gate"):
-        load_params(write(tmp_path, VALID.split("gate:")[0]))
+    with pytest.raises(ValidationError, match="monitoring"):
+        load_params(write(tmp_path, VALID.split("monitoring:")[0]))
 
 
 def test_params_python_object_tag_rejected(tmp_path: Path) -> None:
