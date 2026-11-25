@@ -1,6 +1,7 @@
 """MLflow registry adapter details beyond the contract: run linkage and the refusals of the safe loader."""
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Self
 from uuid import uuid4
 
@@ -77,6 +78,24 @@ def test_load_model_ignores_trust_list_in_model_file(adapters: tuple[MlflowTrack
     assert isinstance(mlflow.sklearn.load_model(info.model_uri), Sneaky)
     with pytest.raises(UntrustedTypesFoundException, match="Sneaky"):
         registry.load_model(version.version)
+
+
+def test_load_model_ignores_global_tracking_uri(
+    adapters: tuple[MlflowTracker, MlflowRegistry], mlflow_tracking_uri: str, tmp_path: Path
+) -> None:
+    """The API process has no tracker setting the global URI; loading must use the registry's own URI."""
+    tracker, registry = adapters
+    with tracker.run("registry", "elsewhere") as run_id:
+        uri = tracker.log_model(run_id, DummyClassifier().fit(FEATURES, TARGET), FEATURES)
+    version = registry.register(uri, run_id)
+
+    mlflow.set_tracking_uri(f"sqlite:///{(tmp_path / 'other.db').as_posix()}")
+    try:
+        model = registry.load_model(version.version)
+    finally:
+        mlflow.set_tracking_uri(mlflow_tracking_uri)
+
+    assert isinstance(model, DummyClassifier)
 
 
 def test_load_model_unknown_version_LookupError(adapters: tuple[MlflowTracker, MlflowRegistry]) -> None:

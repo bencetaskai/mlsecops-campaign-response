@@ -145,9 +145,13 @@ class MlflowRegistry:
         widen that list. Pickle-based models are refused outright.
         """
         self._version(version)
+        # Resolved with our own client, not passed as models:/name/version: MLflow 3.18 resolves that form with a
+        # default client on the process-wide registry URI, ignoring the URI given here. It worked only where
+        # MlflowTracker had set the global URI, and failed in the API, which has no tracker.
+        storage_uri = self._client.get_model_version_download_uri(self._name, str(version))
         with tempfile.TemporaryDirectory() as folder:
             local = Path(mlflow.artifacts.download_artifacts(
-                artifact_uri=f"models:/{self._name}/{version}", dst_path=folder, tracking_uri=self._tracking_uri
+                artifact_uri=storage_uri, dst_path=folder, tracking_uri=self._tracking_uri
             ))
             flavor = Model.load(str(local / "MLmodel")).flavors["sklearn"]
             if flavor.get("serialization_format") != "skops":
