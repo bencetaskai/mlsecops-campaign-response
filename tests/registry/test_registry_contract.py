@@ -87,3 +87,27 @@ def test_registry_version_tags_accepted(backend: tuple[ExperimentTracker, ModelR
 
     with pytest.raises(LookupError):
         backend[1].set_version_tags(version + 1, {"gate": "passed"})
+
+
+def test_registry_version_details_tags_and_metrics(backend: tuple[ExperimentTracker, ModelRegistry]) -> None:
+    tracker, registry = backend
+    model = DummyClassifier().fit(FEATURES, TARGET)
+    with tracker.run("contract", "train") as run_id:
+        tracker.log_metrics(run_id, {"holdout_pr_auc": 0.62})
+        tracker.set_tags(run_id, {"best_candidate": "dummy"})
+        version = registry.register(tracker.log_model(run_id, model, FEATURES), run_id).version
+    registry.set_version_tags(version, {"promoted": "true"})
+
+    details = registry.version_details(version)
+
+    assert (details.version.version, details.version.run_id) == (version, run_id)
+    assert details.version_tags == {"promoted": "true"}
+    assert details.run_tags == {"best_candidate": "dummy"}
+    assert details.run_metrics == {"holdout_pr_auc": 0.62}
+
+
+def test_registry_version_details_unknown_LookupError(backend: tuple[ExperimentTracker, ModelRegistry]) -> None:
+    register_model(backend)
+
+    with pytest.raises(LookupError):
+        backend[1].version_details(99)

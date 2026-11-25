@@ -22,7 +22,7 @@ from mlflow.exceptions import MlflowException
 from mlflow.models import Model
 from mlflow.sklearn import log_model
 
-from campaign_response.registry.ports import Classifier, ModelVersion
+from campaign_response.registry.ports import Classifier, ModelVersion, VersionDetails
 
 MODEL_ARTIFACT_NAME = "model"
 
@@ -137,6 +137,20 @@ class MlflowRegistry:
         with _version_must_exist(self._name, version):
             for key, value in tags.items():
                 self._client.set_model_version_tag(self._name, str(version), key, str(value))
+
+    def version_details(self, version: int) -> VersionDetails:
+        # Every version is registered from a run (register() requires one), so the run always exists.
+        with _version_must_exist(self._name, version):
+            found = self._client.get_model_version(self._name, str(version))
+        run_id = found.run_id or ""
+        run = self._client.get_run(run_id)
+        return VersionDetails(
+            version=ModelVersion(self._name, int(found.version), run_id),
+            version_tags=dict(found.tags),
+            # MLflow's own run tags (mlflow.user, mlflow.source.name, ...) describe the client, not the model.
+            run_tags={key: value for key, value in run.data.tags.items() if not key.startswith("mlflow.")},
+            run_metrics=dict(run.data.metrics),
+        )
 
     def load_model(self, version: int) -> Classifier:
         """Load the skops file with our own trusted types, never the list stored in the model's MLmodel file.

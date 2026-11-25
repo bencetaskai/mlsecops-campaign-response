@@ -41,6 +41,16 @@ class ModelVersion:
             raise ValueError(f"model versions start at 1, got {self.version}")
 
 
+@dataclass(frozen=True)
+class VersionDetails:
+    """What the registry knows about a version: its own tags and the tags and metrics of the run that made it."""
+
+    version: ModelVersion
+    version_tags: Mapping[str, str]
+    run_tags: Mapping[str, str]
+    run_metrics: Mapping[str, float]
+
+
 @runtime_checkable
 class ExperimentTracker(Protocol):
     def run(
@@ -83,5 +93,9 @@ class ModelRegistry(Protocol):
         ...
 
     def set_version_tags(self, version: int, tags: Mapping[str, str]) -> None: ...
+
+    def version_details(self, version: int) -> VersionDetails:
+        """Tags and metrics of the version and its run; LookupError for an unknown version."""
+        ...
 
     def load_model(self, version: int) -> Classifier: ...

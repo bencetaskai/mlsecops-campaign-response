@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 from matplotlib.figure import Figure
 
-from campaign_response.registry.ports import Classifier, ModelVersion
+from campaign_response.registry.ports import Classifier, ModelVersion, VersionDetails
 from campaign_response.storage.prediction_store import COLUMNS, PredictionRecord, check_limit, to_row
 
 RUNNING, FINISHED, FAILED = "RUNNING", "FINISHED", "FAILED"
@@ -121,6 +121,11 @@ class FakeRegistry:
     def set_version_tags(self, version: int, tags: Mapping[str, str]) -> None:
         self._get(version)
         self.version_tags[version].update({key: str(value) for key, value in tags.items()})
+
+    def version_details(self, version: int) -> VersionDetails:
+        found = self._get(version)
+        run = self.tracker.runs[found.run_id]
+        return VersionDetails(found, dict(self.version_tags[version]), dict(run.tags), dict(run.metrics))
 
     def load_model(self, version: int) -> Classifier:
         model = self.tracker.runs[self._get(version).run_id].model
